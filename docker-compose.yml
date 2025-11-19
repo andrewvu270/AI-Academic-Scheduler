@@ -1,0 +1,57 @@
+services:
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: academic_scheduler_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - academic_scheduler_network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: academic_scheduler_backend
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./backend:/app
+      - uploads:/app/uploads
+    depends_on:
+      - redis
+    networks:
+      - academic_scheduler_network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: academic_scheduler_frontend
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - academic_scheduler_network
+    command: npm start
+
+volumes:
+  uploads:
+
+networks:
+  academic_scheduler_network:
+    driver: bridge
