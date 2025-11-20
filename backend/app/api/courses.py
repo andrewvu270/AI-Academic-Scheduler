@@ -22,7 +22,12 @@ async def create_course(
     course: CourseCreate,
     db: Session = Depends(get_db)
 ):
-    db_course = CourseModel(**course.dict())
+    import uuid
+    course_data = course.dict()
+    # Set a default user_id if not provided
+    if 'user_id' not in course_data or not course_data['user_id']:
+        course_data['user_id'] = str(uuid.uuid4())
+    db_course = CourseModel(**course_data)
     db.add(db_course)
     db.commit()
     db.refresh(db_course)

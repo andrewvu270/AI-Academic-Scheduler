@@ -1,5 +1,4 @@
-from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Text
-from sqlalchemy.dialects.postgresql import UUID, JSON
+from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import uuid
@@ -9,8 +8,9 @@ from ..database import Base
 class Task(Base):
     __tablename__ = "tasks"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    course_id = Column(UUID(as_uuid=True), ForeignKey("courses.id"), nullable=False)
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    course_id = Column(String, ForeignKey("courses.id"), nullable=True)
     title = Column(String, nullable=False)
     description = Column(Text)
     task_type = Column(String, nullable=False)  # 'Assignment', 'Exam', 'Quiz', 'Project', 'Reading'

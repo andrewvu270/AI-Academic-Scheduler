@@ -19,31 +19,73 @@ async def get_tasks(
     course_id: str = None,
     db: Session = Depends(get_db)
 ):
-    query = db.query(TaskModel)
-    
-    if course_id:
-        query = query.filter(TaskModel.course_id == course_id)
-    
-    tasks = query.offset(skip).limit(limit).all()
-    total = query.count()
-    
-    return TaskList(tasks=tasks, total=total)
+    try:
+        print(f"Fetching tasks with skip={skip}, limit={limit}, course_id={course_id}")
+        query = db.query(TaskModel)
+        
+        if course_id:
+            query = query.filter(TaskModel.course_id == course_id)
+        
+        # Sort by: 1) status (pending first), 2) due_date (soonest first), 3) priority_score (highest first)
+        tasks = query.order_by(
+            TaskModel.status.desc(),  # pending comes before completed (desc: pending > completed alphabetically)
+            TaskModel.due_date.asc(),
+            TaskModel.priority_score.desc()
+        ).offset(skip).limit(limit).all()
+        
+        print(f"Found {len(tasks)} tasks")
+        
+        total = query.count()
+        print(f"Total tasks: {total}")
+        
+        # Add course_code to each task
+        for task in tasks:
+            if task.course:
+                task.course_code = task.course.code
+            else:
+                task.course_code = "Unknown"
+        
+        result = TaskList(tasks=tasks, total=total)
+        print(f"Returning TaskList with {len(result.tasks)} tasks")
+        return result
+    except Exception as e:
+        import traceback
+        print(f"Error fetching tasks: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching tasks: {str(e)}"
+        )
 
 @router.post("/", response_model=Task)
 async def create_task(
     task: TaskCreate,
     db: Session = Depends(get_db)
 ):
-    # Verify course exists
-    course = db.query(Course).filter(
-        Course.id == task.course_id
-    ).first()
+    import uuid
+    
+    # Verify course exists or create a default one
+    try:
+        course = db.query(Course).filter(
+            Course.id == task.course_id
+        ).first()
+    except:
+        course = None
     
     if not course:
-        raise HTTPException(
-            status_code=404, 
-            detail="Course not found"
+        # Create a default course if it doesn't exist
+        default_course = Course(
+            id=str(uuid.uuid4()),
+            user_id=str(uuid.uuid4()),
+            name="Default Course",
+            code="DEFAULT",
+            semester="Fall 2024",
+            year=2024
         )
+        db.add(default_course)
+        db.commit()
+        db.refresh(default_course)
+        course = default_course
     
     # Calculate weight and priority scores
     weight_calculator = TaskWeightCalculator()

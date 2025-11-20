@@ -32,10 +32,11 @@ async def get_daily_schedule(
     # Convert to dict format for optimizer
     task_dicts = []
     for task in tasks:
+        course_code = task.course.code if task.course else "Unknown"
         task_dicts.append({
             'id': str(task.id),
             'title': task.title,
-            'course_code': task.course.code,
+            'course_code': course_code,
             'due_date': task.due_date,
             'predicted_hours': task.predicted_hours,
             'priority_score': task.priority_score,
@@ -80,10 +81,11 @@ async def generate_daily_schedule(
     # Convert to dict format for optimizer
     task_dicts = []
     for task in tasks:
+        course_code = task.course.code if task.course else "Unknown"
         task_dicts.append({
             'id': str(task.id),
             'title': task.title,
-            'course_code': task.course.code,
+            'course_code': course_code,
             'due_date': task.due_date,
             'predicted_hours': task.predicted_hours,
             'priority_score': task.priority_score,
@@ -120,9 +122,8 @@ async def generate_weekly_schedule(
     start_date = request.start_date or date.today()
     week_end = start_date.replace(day=start_date.day + 6)
     
-    # Get user's pending tasks
-    tasks = db.query(TaskModel).join(Course).filter(
-        Course.user_id == current_user.id,
+    # Get pending tasks
+    tasks = db.query(TaskModel).filter(
         TaskModel.status == 'pending',
         TaskModel.due_date >= start_date
     ).all()
@@ -130,10 +131,11 @@ async def generate_weekly_schedule(
     # Convert to dict format for optimizer
     task_dicts = []
     for task in tasks:
+        course_code = task.course.code if task.course else "Unknown"
         task_dicts.append({
             'id': str(task.id),
             'title': task.title,
-            'course_code': task.course.code,
+            'course_code': course_code,
             'due_date': task.due_date,
             'predicted_hours': task.predicted_hours,
             'priority_score': task.priority_score,

@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-import uuid
 
 class TaskBase(BaseModel):
     title: str
@@ -11,7 +10,7 @@ class TaskBase(BaseModel):
     grade_percentage: Optional[float] = 0.0
 
 class TaskCreate(TaskBase):
-    course_id: uuid.UUID
+    course_id: str
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -22,13 +21,13 @@ class TaskUpdate(BaseModel):
     grade_percentage: Optional[float] = None
 
 class TaskInDBBase(TaskBase):
-    id: uuid.UUID
-    course_id: uuid.UUID
+    id: str
+    course_id: str
     weight_score: float
     predicted_hours: float
     priority_score: float
     status: str
-    metadata: Optional[Dict[str, Any]] = None
+    extra_data: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 

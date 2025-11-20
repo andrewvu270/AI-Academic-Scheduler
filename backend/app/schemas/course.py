@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
-import uuid
 
 class CourseBase(BaseModel):
     name: str
@@ -19,8 +18,8 @@ class CourseUpdate(BaseModel):
     year: Optional[int] = None
 
 class CourseInDBBase(CourseBase):
-    id: uuid.UUID
-    user_id: uuid.UUID
+    id: str
+    user_id: str
     created_at: datetime
     updated_at: Optional[datetime] = None
 

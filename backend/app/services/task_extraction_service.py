@@ -1,8 +1,8 @@
 import json
 import re
 from typing import List, Dict, Any, Optional
-from datetime import datetime, date
-import openai
+from datetime import datetime, date, timedelta
+from openai import AsyncOpenAI
 from ..config import settings
 
 
@@ -11,9 +11,10 @@ class TaskExtractionService:
     
     def __init__(self):
         if settings.OPENAI_API_KEY:
-            openai.api_key = settings.OPENAI_API_KEY
+            self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         else:
             print("Warning: OpenAI API key not configured. Study plan generation will not work.")
+            self.client = None
     
     async def extract_tasks_from_syllabus(self, syllabus_text: str, course_name: str = "") -> List[Dict[str, Any]]:
         """
@@ -27,11 +28,14 @@ class TaskExtractionService:
             List of extracted tasks with their properties
         """
         try:
+            if not self.client:
+                raise Exception("OpenAI API key not configured")
+            
             # Prepare the prompt for OpenAI
             prompt = self._build_extraction_prompt(syllabus_text, course_name)
             
-            # Call OpenAI API
-            response = await openai.ChatCompletion.acreate(
+            # Call OpenAI API using new syntax
+            response = await self.client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {
@@ -76,43 +80,102 @@ class TaskExtractionService:
         Returns:
             Formatted prompt string
         """
-        current_date = datetime.now().strftime("%Y-%m-%d")
+        current_date = datetime.now()
+        current_date_str = current_date.strftime("%Y-%m-%d")
+        semester_start = current_date - datetime.timedelta(days=current_date.weekday())  # Monday of current week
         
         prompt = f"""
-        Extract all assignments, exams, quizzes, projects, and important deadlines from the following syllabus text.
-        
-        Course: {course_name}
-        Current Date: {current_date}
-        
-        Syllabus Text:
-        {syllabus_text[:4000]}  # Limit text to avoid token limits
-        
-        Please extract the following information for each task and return as a JSON array:
-        
+TASK: Extract ALL academic tasks, assignments, exams, quizzes, projects, and important deadlines from this syllabus.
+
+COURSE INFORMATION:
+- Course Name: {course_name}
+- Today's Date: {current_date_str}
+- Semester Start (estimated): {semester_start.strftime("%Y-%m-%d")}
+
+SYLLABUS TEXT:
+{syllabus_text[:5000]}
+
+REQUIRED OUTPUT FORMAT (VALID JSON ONLY):
+{{
+    "course_code": "EXTRACTED COURSE CODE",
+    "tasks": [
         {{
-            "tasks": [
-                {{
-                    "title": "Task title",
-                    "description": "Brief description",
-                    "task_type": "Assignment|Exam|Quiz|Project|Reading|Lab",
-                    "due_date": "YYYY-MM-DD",
-                    "due_time": "HH:MM",
-                    "grade_percentage": 0.0,
-                    "instructor_keywords": ["important", "mandatory", "critical"],
-                    "notes": "Additional notes"
-                }}
-            ]
+            "title": "Task name",
+            "description": "What is required",
+            "task_type": "Assignment|Exam|Quiz|Project|Reading|Lab|Presentation|Discussion|Other",
+            "due_date": "YYYY-MM-DD",
+            "due_time": "HH:MM",
+            "grade_percentage": 5.0,
+            "notes": "Any additional details"
         }}
-        
-        Guidelines:
-        1. Look for due dates and deadlines
-        2. Identify task types (assignments, exams, quizzes, etc.)
-        3. Extract grade percentages when available
-        4. Include instructor emphasis keywords
-        5. If date is ambiguous, use context to determine the most likely date
-        6. If time is not specified, use "23:59" as default
-        7. If grade percentage is not specified, estimate based on task type
-        8. Return valid JSON only, no additional text
+    ]
+}}
+
+COURSE CODE EXTRACTION:
+- Look for patterns like: "CS101", "MATH 201", "BIO-301", "PSYCH 101", "ENGL 102"
+- Check headers, titles, and first paragraphs
+- Course code is usually alphanumeric (letters + numbers)
+- If not found, use "UNKNOWN"
+
+DATE EXTRACTION RULES (CRITICAL):
+1. EXACT DATES: Look for "January 15", "1/15", "01/15/2024", "15 January", "Jan 15"
+2. WEEK NUMBERS: "Week 5" = 5 weeks from semester start. Calculate: {semester_start.strftime("%Y-%m-%d")} + (5 * 7 days)
+3. RELATIVE DATES: "End of week 3", "by Friday of week 4", "start of month"
+4. MONTH NAMES: "May 4th", "December 10", "March 15, 2024"
+5. PATTERNS: Look for "due", "deadline", "submit by", "by", "on", "before"
+6. DEFAULT TIME: If no time given, use "23:59" (end of day)
+7. FUTURE DATES ONLY: All dates must be in the future from today ({current_date_str})
+8. AMBIGUOUS DATES: Use context clues (e.g., "Assignment 1 due Week 2" means 2 weeks from start)
+
+TASK TYPE IDENTIFICATION:
+- Exam/Test: "exam", "test", "midterm", "final", "quiz"
+- Assignment: "assignment", "hw", "homework", "problem set", "worksheet"
+- Project: "project", "group project", "research project"
+- Quiz: "quiz", "pop quiz", "weekly quiz"
+- Reading: "reading", "chapter", "textbook"
+- Lab: "lab", "laboratory", "practical"
+- Presentation: "presentation", "talk", "speech"
+- Discussion: "discussion", "forum", "debate"
+
+GRADE PERCENTAGE ESTIMATION:
+- If percentage given in syllabus, use it
+- Otherwise estimate: Exam=25%, Assignment=10%, Project=15%, Quiz=5%, Participation=5%, Other=10%
+- Total should make sense for a course
+
+EXTRACTION RULES:
+1. Extract EVERY deadline mentioned in the syllabus
+2. If a task appears multiple times (e.g., "Weekly assignments"), create ONE entry with "Weekly" in title
+3. Include all relevant context in description
+4. Be thorough - better to extract too much than miss deadlines
+5. Return ONLY valid JSON, no explanations or extra text
+6. Ensure all dates are realistic and in the future
+
+EXAMPLE OUTPUT:
+{{
+    "course_code": "CS101",
+    "tasks": [
+        {{
+            "title": "Assignment 1",
+            "description": "Chapter 1-2 problems",
+            "task_type": "Assignment",
+            "due_date": "2024-09-20",
+            "due_time": "23:59",
+            "grade_percentage": 10.0,
+            "notes": "Submit via Canvas"
+        }},
+        {{
+            "title": "Midterm Exam",
+            "description": "Covers chapters 1-5",
+            "task_type": "Exam",
+            "due_date": "2024-10-15",
+            "due_time": "14:00",
+            "grade_percentage": 25.0,
+            "notes": "In-class exam"
+        }}
+    ]
+}}
+
+NOW EXTRACT ALL TASKS FROM THE SYLLABUS ABOVE. RETURN ONLY VALID JSON.
         """
         
         return prompt

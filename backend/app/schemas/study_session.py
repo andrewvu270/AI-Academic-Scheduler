@@ -1,10 +1,9 @@
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
-import uuid
 
 class StudySessionBase(BaseModel):
-    task_id: uuid.UUID
+    task_id: str
     minutes_spent: int
     date: datetime
     notes: Optional[str] = None
@@ -17,8 +16,8 @@ class StudySessionUpdate(BaseModel):
     notes: Optional[str] = None
 
 class StudySessionInDBBase(StudySessionBase):
-    id: uuid.UUID
-    user_id: uuid.UUID
+    id: str
+    user_id: str
     created_at: datetime
 
     class Config:

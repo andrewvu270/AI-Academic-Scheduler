@@ -15,9 +15,9 @@ import {
 } from '@mui/material';
 import {
   CloudUpload as CloudUploadIcon,
-  School as SchoolIcon,
-  Schedule as ScheduleIcon,
-  TrendingUp as TrendingUpIcon,
+  CheckCircle as CheckCircleIcon,
+  Warning as WarningIcon,
+  Error as ErrorIcon,
 } from '@mui/icons-material';
 
 const Dashboard: React.FC = () => {
@@ -43,26 +43,69 @@ const Dashboard: React.FC = () => {
 
         const formData = new FormData();
         formData.append('file', file);
+        formData.append('course_id', 'default-course'); // TODO: Get actual course_id from user selection
 
-        // TODO: Replace with actual API endpoint
-        // const response = await fetch('/api/upload', { method: 'POST', body: formData });
-        // if (!response.ok) throw new Error('Upload failed');
+        const response = await fetch('http://localhost:8000/api/upload/preview', {
+          method: 'POST',
+          body: formData,
+        });
 
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.detail || 'Upload failed');
+        }
+
+        const data = await response.json();
+        
+        // Save extracted tasks to database
+        if (data.tasks && data.tasks.length > 0) {
+          for (const task of data.tasks) {
+            try {
+              // Parse due_date to ISO format datetime
+              let dueDateTime = task.due_date;
+              if (typeof dueDateTime === 'string' && !dueDateTime.includes('T')) {
+                // If it's just a date (YYYY-MM-DD), add time
+                dueDateTime = `${dueDateTime}T23:59:00`;
+              }
+              
+              const taskResponse = await fetch('http://localhost:8000/api/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  title: task.title,
+                  description: task.description || '',
+                  task_type: task.task_type,
+                  due_date: dueDateTime,
+                  grade_percentage: task.grade_percentage || 0,
+                  course_id: 'default-course-id', // Will auto-create default course
+                }),
+              });
+              if (!taskResponse.ok) {
+                const error = await taskResponse.json();
+                console.error('Failed to save task:', task.title, error);
+              }
+            } catch (err) {
+              console.error('Error saving task:', err);
+            }
+          }
+        }
+        
         setUploadedFiles([...uploadedFiles, file.name]);
       }
 
-      setUploadMessage({ type: 'success', text: 'Files uploaded successfully!' });
+      setUploadMessage({ type: 'success', text: 'Files uploaded successfully and tasks saved!' });
     } catch (error) {
-      setUploadMessage({ type: 'error', text: 'Failed to upload files' });
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload files';
+      setUploadMessage({ type: 'error', text: errorMessage });
     } finally {
       setUploading(false);
     }
   };
 
   const stats = [
-    { label: 'Active Courses', value: '4', icon: SchoolIcon, color: '#1976d2' },
-    { label: 'Tasks Due', value: '12', icon: ScheduleIcon, color: '#f57c00' },
-    { label: 'Study Hours', value: '24.5', icon: TrendingUpIcon, color: '#388e3c' },
+    { label: 'Completed', value: '8', icon: CheckCircleIcon, color: '#388e3c' },
+    { label: 'Pending', value: '12', icon: WarningIcon, color: '#f57c00' },
+    { label: 'Due Soon', value: '0', icon: ErrorIcon, color: '#d32f2f' },
   ];
 
   return (
@@ -180,53 +223,6 @@ const Dashboard: React.FC = () => {
         </Paper>
       )}
 
-      {/* Quick Actions */}
-      <Box sx={{ mt: 4 }}>
-        <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
-          Quick Actions
-        </Typography>
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6} md={3}>
-            <Button
-              fullWidth
-              variant="outlined"
-              sx={{ py: 2 }}
-              href="/courses"
-            >
-              View Courses
-            </Button>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Button
-              fullWidth
-              variant="outlined"
-              sx={{ py: 2 }}
-              href="/tasks"
-            >
-              View Tasks
-            </Button>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Button
-              fullWidth
-              variant="outlined"
-              sx={{ py: 2 }}
-              href="/schedule"
-            >
-              View Schedule
-            </Button>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Button
-              fullWidth
-              variant="contained"
-              sx={{ py: 2 }}
-            >
-              Generate Plan
-            </Button>
-          </Grid>
-        </Grid>
-      </Box>
     </Container>
   );
 };

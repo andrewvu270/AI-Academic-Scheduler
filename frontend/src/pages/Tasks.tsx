@@ -1,0 +1,357 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Container,
+  Paper,
+  Box,
+  Typography,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  CircularProgress,
+  Alert,
+  Chip,
+  Dialog,
+  TextField,
+  MenuItem,
+} from '@mui/material';
+import {
+  Add as AddIcon,
+  CheckCircle as CheckCircleIcon,
+  Schedule as ScheduleIcon,
+} from '@mui/icons-material';
+
+interface Task {
+  id: string;
+  title: string;
+  task_type: string;
+  due_date: string;
+  weight_score: number;
+  predicted_hours: number;
+  priority_score: number;
+  status: string;
+  grade_percentage: number;
+  course_code: string;
+}
+
+interface TasksResponse {
+  tasks: Task[];
+  total: number;
+}
+
+const Tasks: React.FC = () => {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [openDialog, setOpenDialog] = useState(false);
+  const [sortBy, setSortBy] = useState<'deadline' | 'priority'>('deadline');
+  const [filterBy, setFilterBy] = useState<'all' | 'pending' | 'completed'>('pending');
+  const [newTask, setNewTask] = useState({
+    title: '',
+    task_type: 'Assignment',
+    due_date: '',
+    grade_percentage: 0,
+    course_id: 'default-course',
+  });
+
+  useEffect(() => {
+    fetchTasks();
+  }, []);
+
+  const fetchTasks = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('http://localhost:8000/api/tasks');
+      if (!response.ok) throw new Error('Failed to fetch tasks');
+      const data: TasksResponse = await response.json();
+      setTasks(data.tasks);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load tasks');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddTask = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTask),
+      });
+      if (!response.ok) throw new Error('Failed to create task');
+      setNewTask({
+        title: '',
+        task_type: 'Assignment',
+        due_date: '',
+        grade_percentage: 0,
+        course_id: 'default-course',
+      });
+      setOpenDialog(false);
+      fetchTasks();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create task');
+    }
+  };
+
+  const handleCompleteTask = async (taskId: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/tasks/${taskId}/complete`, {
+        method: 'POST',
+      });
+      if (!response.ok) throw new Error('Failed to complete task');
+      fetchTasks();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to complete task');
+    }
+  };
+
+  const getTaskTypeColor = (type: string) => {
+    const colors: { [key: string]: 'default' | 'primary' | 'secondary' | 'error' | 'warning' | 'info' | 'success' } = {
+      Assignment: 'primary',
+      Exam: 'error',
+      Quiz: 'warning',
+      Project: 'secondary',
+      Reading: 'info',
+      Lab: 'success',
+    };
+    return colors[type] || 'default';
+  };
+
+  const getHoursRemaining = (dueDate: string): string => {
+    const now = new Date();
+    const due = new Date(dueDate);
+    const diffMs = due.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) return 'Overdue';
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Tomorrow';
+    return `${diffDays}d`;
+  };
+
+  const getFilteredAndSortedTasks = (): Task[] => {
+    let filtered = tasks.filter((task) => {
+      if (filterBy === 'pending') return task.status === 'pending';
+      if (filterBy === 'completed') return task.status === 'completed';
+      return true; // 'all'
+    });
+
+    return filtered.sort((a, b) => {
+      if (sortBy === 'deadline') {
+        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+      } else {
+        // Sort by priority: considers urgency (days until due) + importance (grade %)
+        const now = new Date();
+        const daysUntilA = Math.ceil((new Date(a.due_date).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        const daysUntilB = Math.ceil((new Date(b.due_date).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        
+        // Calculate urgency score (lower days = higher urgency)
+        const urgencyA = Math.max(0, 10 - daysUntilA); // 0-10 scale
+        const urgencyB = Math.max(0, 10 - daysUntilB);
+        
+        // Combined score: 60% urgency + 40% importance (grade %)
+        const scoreA = urgencyA * 0.6 + (a.grade_percentage / 100) * 10 * 0.4;
+        const scoreB = urgencyB * 0.6 + (b.grade_percentage / 100) * 10 * 0.4;
+        
+        return scoreB - scoreA; // Higher score first
+      }
+    });
+  };
+
+  if (loading) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
+        <CircularProgress />
+      </Container>
+    );
+  }
+
+  return (
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Typography variant="h3" component="h1" sx={{ fontWeight: 'bold' }}>
+          Tasks
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => setOpenDialog(true)}
+        >
+          Add Task
+        </Button>
+      </Box>
+
+      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+
+      {/* Filter and Sort Controls */}
+      <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant={filterBy === 'pending' ? 'contained' : 'outlined'}
+            onClick={() => setFilterBy('pending')}
+            size="small"
+          >
+            Pending
+          </Button>
+          <Button
+            variant={filterBy === 'completed' ? 'contained' : 'outlined'}
+            onClick={() => setFilterBy('completed')}
+            size="small"
+          >
+            Completed
+          </Button>
+          <Button
+            variant={filterBy === 'all' ? 'contained' : 'outlined'}
+            onClick={() => setFilterBy('all')}
+            size="small"
+          >
+            All
+          </Button>
+        </Box>
+
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant={sortBy === 'deadline' ? 'contained' : 'outlined'}
+            onClick={() => setSortBy('deadline')}
+            size="small"
+          >
+            Sort: Deadline
+          </Button>
+          <Button
+            variant={sortBy === 'priority' ? 'contained' : 'outlined'}
+            onClick={() => setSortBy('priority')}
+            size="small"
+          >
+            Sort: Priority
+          </Button>
+        </Box>
+      </Box>
+
+      {tasks.length === 0 ? (
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <ScheduleIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
+          <Typography variant="h6" color="textSecondary">
+            No tasks yet. Add one to get started!
+          </Typography>
+        </Paper>
+      ) : (
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 'bold' }}>Title</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Course</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Due Date</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Time Left</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Grade %</TableCell>
+                <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {getFilteredAndSortedTasks().map((task) => (
+                <TableRow
+                  key={task.id}
+                  hover
+                  sx={{
+                    backgroundColor: task.status === 'completed' ? '#f5f5f5' : 'inherit',
+                    opacity: task.status === 'completed' ? 0.6 : 1,
+                  }}
+                >
+                  <TableCell sx={{ color: task.status === 'completed' ? '#999' : 'inherit' }}>
+                    {task.title}
+                  </TableCell>
+                  <TableCell sx={{ color: task.status === 'completed' ? '#999' : 'inherit' }}>
+                    {task.course_code}
+                  </TableCell>
+                  <TableCell>
+                    <Chip label={task.task_type} color={getTaskTypeColor(task.task_type)} size="small" />
+                  </TableCell>
+                  <TableCell sx={{ color: task.status === 'completed' ? '#999' : 'inherit' }}>
+                    {new Date(task.due_date).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: task.status === 'completed' ? '#999' : getHoursRemaining(task.due_date) === 'Overdue' ? '#d32f2f' : 'inherit' }}>
+                    {getHoursRemaining(task.due_date)}
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: task.status === 'completed' ? '#999' : task.grade_percentage >= 20 ? '#d32f2f' : 'inherit' }}>
+                    {task.grade_percentage}%
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={task.status}
+                      color={task.status === 'completed' ? 'success' : 'default'}
+                      size="small"
+                      onClick={() => handleCompleteTask(task.id)}
+                      clickable
+                      icon={task.status === 'completed' ? <CheckCircleIcon /> : undefined}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
+            Add New Task
+          </Typography>
+          <TextField
+            fullWidth
+            label="Task Title"
+            value={newTask.title}
+            onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            fullWidth
+            select
+            label="Task Type"
+            value={newTask.task_type}
+            onChange={(e) => setNewTask({ ...newTask, task_type: e.target.value })}
+            sx={{ mb: 2 }}
+          >
+            <MenuItem value="Assignment">Assignment</MenuItem>
+            <MenuItem value="Exam">Exam</MenuItem>
+            <MenuItem value="Quiz">Quiz</MenuItem>
+            <MenuItem value="Project">Project</MenuItem>
+            <MenuItem value="Reading">Reading</MenuItem>
+            <MenuItem value="Lab">Lab</MenuItem>
+          </TextField>
+          <TextField
+            fullWidth
+            type="date"
+            label="Due Date"
+            value={newTask.due_date}
+            onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value })}
+            InputLabelProps={{ shrink: true }}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            fullWidth
+            type="number"
+            label="Grade Percentage"
+            value={newTask.grade_percentage}
+            onChange={(e) => setNewTask({ ...newTask, grade_percentage: parseFloat(e.target.value) })}
+            sx={{ mb: 2 }}
+          />
+          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+            <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
+            <Button variant="contained" onClick={handleAddTask}>
+              Add Task
+            </Button>
+          </Box>
+        </Box>
+      </Dialog>
+    </Container>
+  );
+};
+
+export default Tasks;

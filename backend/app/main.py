@@ -1,9 +1,13 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
+from .database import Base, engine
 
 # Import routers
-from .api import courses, tasks, schedule, upload, ml
+from .api import courses, tasks, schedule, upload, ml, auth, survey, guest
+
+# Create tables
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AI Academic Scheduler", version="1.0.0")
 
@@ -22,6 +26,9 @@ app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(schedule.router, prefix="/api/schedule", tags=["schedule"])
 app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
 app.include_router(ml.router, prefix="/api/ml", tags=["ml"])
+app.include_router(auth.router, tags=["auth"])
+app.include_router(survey.router, tags=["survey"])
+app.include_router(guest.router, tags=["guest"])
 
 @app.get("/")
 async def root():
