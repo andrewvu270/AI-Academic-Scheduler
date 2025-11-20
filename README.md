@@ -2,45 +2,7 @@
 
 An intelligent academic planning system that helps students optimize their study schedules by extracting deadlines from syllabi, predicting workload, and generating optimized daily study plans using machine learning.
 
-## 🚀 Quick Start
-
-### Prerequisites
-- Docker and Docker Compose
-- OpenAI API key
-- Git
-
-### One-Command Setup
-
-```bash
-git clone <your-repository-url>
-cd academic-scheduler
-./scripts/setup.sh
-```
-
-### Configure Environment
-
-Edit `.env` file with your API keys:
-
-```env
-# Required: OpenAI API Key (get from https://platform.openai.com/api-keys)
-OPENAI_API_KEY=sk-your-actual-openai-key-here
-
-# Database (Supabase)
-SUPABASE_URL=your-supabase-project-url
-SUPABASE_KEY=your-supabase-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
-
-# JWT Secret Key
-SECRET_KEY=your-super-secret-jwt-key-change-in-production
-```
-
-### Access Points
-
-- **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
-- **Demo User**: demo@example.com / password123
-
-## 📚 Documentation
+##  Documentation
 
 For detailed documentation, see the [docs/](docs/) directory:
 
