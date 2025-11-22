@@ -82,7 +82,7 @@ class TaskExtractionService:
         """
         current_date = datetime.now()
         current_date_str = current_date.strftime("%Y-%m-%d")
-        semester_start = current_date - datetime.timedelta(days=current_date.weekday())  # Monday of current week
+        semester_start = current_date - timedelta(days=current_date.weekday())  # Monday of current week
         
         prompt = f"""
 TASK: Extract ALL academic tasks, assignments, exams, quizzes, projects, and important deadlines from this syllabus.

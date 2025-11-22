@@ -1,15 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Header
+from typing import List, Dict, Any, Optional
 import uuid
 from datetime import datetime
 
-from ..database import get_db
-from ..models.course import Course
-from ..models.task import Task
+from ..database import get_supabase, get_supabase_admin
 from ..services.pdf_service import pdf_service
 from ..services.task_extraction_service import task_extraction_service
 from ..services.ml_service import ml_service
+from ..services.auth_service import AuthService
 from ..ml.weight_calculator import TaskWeightCalculator
 from ..ml.priority_calculator import PriorityCalculator
 
@@ -20,7 +18,7 @@ router = APIRouter()
 async def upload_syllabus(
     file: UploadFile = File(...),
     course_id: str = Form(...),
-    db: Session = Depends(get_db)
+    authorization: Optional[str] = Header(None)
 ):
     """
     Upload and process a syllabus file to extract tasks.
@@ -28,27 +26,16 @@ async def upload_syllabus(
     Args:
         file: Uploaded syllabus file (PDF or image)
         course_id: ID of the course to associate tasks with
-        db: Database session
-        current_user: Currently authenticated user
         
     Returns:
         Dictionary containing extracted tasks and processing status
     """
     try:
+        print(f"[UPLOAD] Starting syllabus upload for course_id={course_id}, file={file.filename}")
+        
         # Validate file size
         pdf_service.validate_file_size(file)
-        
-        # Verify course exists and belongs to user
-        course = db.query(Course).filter(
-            Course.id == course_id,
-            Course.user_id == current_user.id
-        ).first()
-        
-        if not course:
-            raise HTTPException(
-                status_code=404,
-                detail="Course not found or access denied"
-            )
+        print(f"[UPLOAD] File size validated")
         
         # Process the uploaded file
         extracted_text = await pdf_service.process_uploaded_file(file)
@@ -65,7 +52,7 @@ async def upload_syllabus(
         # Extract tasks using OpenAI
         extracted_tasks = await task_extraction_service.extract_tasks_from_syllabus(
             cleaned_text, 
-            course.name
+            "Unknown Course"  # Course name not available in guest mode
         )
         
         if not extracted_tasks:
@@ -79,8 +66,32 @@ async def upload_syllabus(
         weight_calculator = TaskWeightCalculator()
         priority_calculator = PriorityCalculator()
         
+        print(f"[UPLOAD] Extracted {len(extracted_tasks)} tasks from syllabus")
+        
+        # Determine if user is authenticated
+        user_id = None
+        is_authenticated = False
+        
+        if authorization:
+            try:
+                # Extract token from "Bearer <token>"
+                token = authorization.split(" ")[1] if " " in authorization else authorization
+                user_data = await AuthService.verify_user_session(token)
+                if user_data:
+                    user_id = user_data.get("id")
+                    is_authenticated = True
+                    print(f"[UPLOAD] Authenticated user found: {user_id}")
+            except Exception as e:
+                print(f"[UPLOAD] Error verifying token: {str(e)}")
+        
+        if not is_authenticated:
+            print("[UPLOAD] Guest user - will return data without saving to Supabase")
+            user_id = "guest"  # Use "guest" as placeholder for frontend
+
         for task_data in extracted_tasks:
             try:
+                print(f"[UPLOAD] Processing task: {task_data.get('title')}")
+                
                 # Calculate weight score
                 weight_score = weight_calculator.calculate_weight_score(task_data)
                 
@@ -97,40 +108,71 @@ async def upload_syllabus(
                     task_with_predictions
                 )
                 
-                # Create task in database
-                db_task = Task(
-                    id=str(uuid.uuid4()),
-                    course_id=course_id,
-                    title=task_data["title"],
-                    description=task_data.get("description", ""),
-                    task_type=task_data["task_type"],
-                    due_date=datetime.strptime(task_data["due_date"], "%Y-%m-%d"),
-                    weight_score=weight_score,
-                    predicted_hours=predicted_hours,
-                    priority_score=priority_score,
-                    status="pending",
-                    grade_percentage=task_data.get("grade_percentage", 0),
-                    created_at=datetime.utcnow()
-                )
+                # Save to Supabase
+                new_task = {
+                    "id": str(uuid.uuid4()),
+                    "course_id": course_id,
+                    "user_id": user_id,
+                    "title": task_data["title"],
+                    "description": task_data.get("description", ""),
+                    "task_type": task_data["task_type"],
+                    "due_date": task_data["due_date"],
+                    "weight_score": weight_score,
+                    "predicted_hours": predicted_hours,
+                    "priority_score": priority_score,
+                    "status": "pending",
+                    "grade_percentage": task_data.get("grade_percentage", 0),
+                    "created_at": datetime.utcnow().isoformat()
+                }
                 
-                db.add(db_task)
-                db.commit()
-                db.refresh(db_task)
-                
-                saved_tasks.append({
-                    "id": db_task.id,
-                    "title": db_task.title,
-                    "task_type": db_task.task_type,
-                    "due_date": db_task.due_date.isoformat(),
-                    "weight_score": db_task.weight_score,
-                    "predicted_hours": db_task.predicted_hours,
-                    "priority_score": db_task.priority_score
-                })
+                print(f"[UPLOAD] Task prepared: {new_task}")
+                saved_tasks.append(new_task)
+                print(f"[UPLOAD] Task added to list")
                 
             except Exception as e:
-                print(f"Error saving task: {str(e)}")
+                import traceback
+                print(f"[UPLOAD] Error processing task: {str(e)}")
+                print(traceback.format_exc())
                 # Continue with other tasks even if one fails
                 continue
+        
+        if not saved_tasks:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to extract any valid tasks"
+            )
+            
+        # Only save to Supabase if user is authenticated
+        if is_authenticated:
+            try:
+                # Use admin client to bypass RLS since this is a backend operation
+                supabase_admin = get_supabase_admin()
+                
+                # Ensure user exists in public.users table
+                user_check = supabase_admin.table("users").select("id").eq("id", user_id).execute()
+                if not user_check.data:
+                    print(f"[UPLOAD] User {user_id} not found in public.users, creating...")
+                    new_user_data = {
+                        "id": user_id,
+                        "email": f"user_{user_id}@example.com",
+                        "full_name": "",
+                        "created_at": datetime.utcnow().isoformat(),
+                        "updated_at": datetime.utcnow().isoformat()
+                    }
+                    supabase_admin.table("users").insert(new_user_data).execute()
+                    print(f"[UPLOAD] Created user in public.users: {user_id}")
+                
+                print(f"[UPLOAD] Inserting {len(saved_tasks)} tasks into Supabase for authenticated user")
+                response = supabase_admin.table("tasks").insert(saved_tasks).execute()
+                print(f"[UPLOAD] Insert successful")
+            except Exception as e:
+                print(f"[UPLOAD] Database insert failed: {str(e)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to save tasks to database: {str(e)}"
+                )
+        else:
+            print(f"[UPLOAD] Guest user - returning {len(saved_tasks)} tasks without saving to database")
         
         if not saved_tasks:
             raise HTTPException(
@@ -150,6 +192,9 @@ async def upload_syllabus(
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print(f"[UPLOAD] Error in upload_syllabus: {str(e)}")
+        print(traceback.format_exc())
         raise HTTPException(
             status_code=500,
             detail=f"Syllabus processing failed: {str(e)}"
@@ -276,8 +321,7 @@ async def submit_task_feedback(
     task_id: str,
     actual_hours: float,
     difficulty_rating: int = 5,
-    notes: str = "",
-    db: Session = Depends(get_db)
+    notes: str = ""
 ):
     """
     Submit feedback on actual task completion time for ML model training.
@@ -287,13 +331,13 @@ async def submit_task_feedback(
         actual_hours: Actual hours spent on the task
         difficulty_rating: User's difficulty rating (1-10)
         notes: Optional notes about the task
-        db: Database session
-        current_user: Currently authenticated user
         
     Returns:
         Feedback submission confirmation
     """
     try:
+        supabase = get_supabase()
+        
         # Validate input
         if actual_hours < 0 or actual_hours > 100:
             raise HTTPException(
@@ -308,35 +352,31 @@ async def submit_task_feedback(
             )
         
         # Get the task
-        task = db.query(Task).filter(
-            Task.id == task_id,
-            Task.course_id.in_(
-                db.query(Course.id).filter(Course.user_id == current_user.id)
-            )
-        ).first()
+        task_response = supabase.table("tasks").select("*").eq("id", task_id).execute()
         
-        if not task:
+        if not task_response.data:
             raise HTTPException(
                 status_code=404,
-                detail="Task not found or access denied"
+                detail="Task not found"
             )
+        
+        task = task_response.data[0]
         
         # Prepare feedback data for ML training
         feedback_data = {
             "task_data": {
-                "title": task.title,
-                "task_type": task.task_type,
-                "grade_percentage": task.grade_percentage,
-                "description": task.description,
-                "due_date": task.due_date.strftime("%Y-%m-%d"),
-                "predicted_hours": task.predicted_hours,
-                "weight_score": task.weight_score,
-                "priority_score": task.priority_score
+                "title": task.get("title"),
+                "task_type": task.get("task_type"),
+                "grade_percentage": task.get("grade_percentage", 0),
+                "description": task.get("description", ""),
+                "due_date": task.get("due_date", ""),
+                "predicted_hours": task.get("predicted_hours", 0),
+                "weight_score": task.get("weight_score", 0),
+                "priority_score": task.get("priority_score", 0)
             },
             "actual_hours": actual_hours,
             "difficulty_rating": difficulty_rating,
             "notes": notes,
-            "user_id": current_user.id,
             "timestamp": datetime.utcnow().isoformat()
         }
         
@@ -344,7 +384,7 @@ async def submit_task_feedback(
         await ml_service.update_model_with_feedback(feedback_data["task_data"], actual_hours)
         
         # Calculate prediction accuracy
-        prediction_error = abs(task.predicted_hours - actual_hours)
+        prediction_error = abs(task.get("predicted_hours", 0) - actual_hours)
         accuracy_percentage = max(0, 100 - (prediction_error / max(actual_hours, 1) * 100))
         
         return {
@@ -352,7 +392,7 @@ async def submit_task_feedback(
             "message": "Feedback submitted successfully",
             "feedback": {
                 "task_id": task_id,
-                "predicted_hours": task.predicted_hours,
+                "predicted_hours": task.get("predicted_hours", 0),
                 "actual_hours": actual_hours,
                 "prediction_error": round(prediction_error, 2),
                 "accuracy_percentage": round(accuracy_percentage, 2),
