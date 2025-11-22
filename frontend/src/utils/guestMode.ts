@@ -46,6 +46,35 @@ export const clearGuestSession = () => {
   localStorage.removeItem('guest_session_id');
 };
 
+export const clearAllGuestData = () => {
+  // Get all localStorage keys
+  const keysToRemove: string[] = [];
+  
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key) {
+      // Remove all guest-related data including uploaded files tracking
+      if (key.startsWith('task_') || 
+          key.startsWith('course_') || 
+          key === 'guest_session_id' ||
+          key.startsWith('uploaded_files') ||
+          key.startsWith('guest_')) {
+        keysToRemove.push(key);
+      }
+    }
+  }
+  
+  // Remove all identified keys
+  keysToRemove.forEach(key => {
+    localStorage.removeItem(key);
+  });
+  
+  console.log(`Cleared ${keysToRemove.length} guest data items from localStorage`);
+  
+  // Force a page refresh to ensure all components reset to clean state
+  window.location.reload();
+};
+
 export const migrateGuestData = async (userId: string) => {
   const guestSessionId = getGuestSessionId();
   
