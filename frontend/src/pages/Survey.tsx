@@ -16,6 +16,7 @@ import {
   Grid,
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import Navigation from '../components/Navigation';
 
 interface SurveyItem {
   task_title: string;
@@ -49,6 +50,7 @@ const Survey: React.FC = () => {
   ]);
   const [userFeedback, setUserFeedback] = useState('');
   const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleAddItem = () => {
@@ -80,13 +82,111 @@ const Survey: React.FC = () => {
     setItems(newItems);
   };
 
+  const handleGenerateSample = async () => {
+    setGenerating(true);
+    setMessage(null);
+    
+    try {
+      // For now, generate a realistic sample locally
+      // This can be replaced with actual AI generation when backend is ready
+      const sampleTasks = [
+        {
+          task_title: 'Linear Algebra Problem Set 3',
+          task_type: 'Assignment',
+          due_date: '2025-12-15',
+          grade_percentage: 8,
+          estimated_hours: 4,
+          actual_hours: 5.5,
+          difficulty_level: 3,
+          priority_rating: 4,
+          completed: true,
+          completion_date: '2025-12-14',
+          notes: 'Matrix operations and eigenvalues',
+        },
+        {
+          task_title: 'Research Paper - Climate Change Impact',
+          task_type: 'Project',
+          due_date: '2025-12-20',
+          grade_percentage: 25,
+          estimated_hours: 15,
+          actual_hours: 18,
+          difficulty_level: 4,
+          priority_rating: 5,
+          completed: true,
+          completion_date: '2025-12-18',
+          notes: '10-page research paper with citations',
+        },
+        {
+          task_title: 'Chapter 5 Quiz - Organic Chemistry',
+          task_type: 'Quiz',
+          due_date: '2025-12-10',
+          grade_percentage: 5,
+          estimated_hours: 2,
+          actual_hours: 1.5,
+          difficulty_level: 2,
+          priority_rating: 3,
+          completed: true,
+          completion_date: '2025-12-09',
+          notes: 'Online quiz, multiple choice',
+        },
+        {
+          task_title: 'Data Structures Lab 7',
+          task_type: 'Lab',
+          due_date: '2025-12-12',
+          grade_percentage: 3,
+          estimated_hours: 3,
+          actual_hours: 4,
+          difficulty_level: 3,
+          priority_rating: 3,
+          completed: true,
+          completion_date: '2025-12-11',
+          notes: 'Implement binary search tree',
+        },
+        {
+          task_title: 'Midterm Exam - Macroeconomics',
+          task_type: 'Exam',
+          due_date: '2025-12-18',
+          grade_percentage: 30,
+          estimated_hours: 12,
+          actual_hours: 15,
+          difficulty_level: 5,
+          priority_rating: 5,
+          completed: true,
+          completion_date: '2025-12-18',
+          notes: 'Covers chapters 1-8, in-class exam',
+        },
+      ];
+      
+      // Pick a random sample
+      const randomSample = sampleTasks[Math.floor(Math.random() * sampleTasks.length)];
+      
+      // Set the sample in the form
+      setItems([randomSample]);
+      
+      setMessage({ 
+        type: 'success', 
+        text: 'Sample data loaded - review and modify as needed, then click Submit Survey' 
+      });
+      
+    } catch (error) {
+      console.error('Error generating sample:', error);
+      setMessage({ type: 'error', text: 'Failed to generate sample' });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const handleSubmit = async () => {
+    console.log('Submit button clicked');
+    
     if (items.some(item => !item.task_title || !item.due_date)) {
       setMessage({ type: 'error', text: 'Please fill in all required fields' });
       return;
     }
 
+    console.log('Submitting survey with items:', items);
     setLoading(true);
+    
     try {
       const response = await fetch('http://localhost:8000/api/survey/submit', {
         method: 'POST',
@@ -97,9 +197,21 @@ const Survey: React.FC = () => {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to submit survey');
+      console.log('Response status:', response.status);
       
-      setMessage({ type: 'success', text: 'Survey submitted successfully! Thank you for contributing to model training.' });
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Server error:', errorText);
+        throw new Error(`Failed to submit survey: ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Survey submitted successfully:', data);
+      
+      setMessage({ 
+        type: 'success', 
+        text: `Survey submitted successfully! ${data.saved_to_db ? `Saved ${data.saved_to_db} records to database.` : ''}` 
+      });
       setItems([
         {
           task_title: '',
@@ -117,14 +229,17 @@ const Survey: React.FC = () => {
       ]);
       setUserFeedback('');
     } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to submit survey' });
+      console.error('Error submitting survey:', error);
+      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to submit survey' });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <>
+      <Navigation />
+      <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h3" component="h1" sx={{ fontWeight: 'bold', mb: 2 }}>
           Task Data Collection Survey
@@ -142,18 +257,27 @@ const Survey: React.FC = () => {
       )}
 
       <Box sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
             Tasks ({items.length})
           </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleAddItem}
-            disabled={loading}
-          >
-            Add Task
-          </Button>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              variant="outlined"
+              onClick={handleGenerateSample}
+              disabled={loading || generating}
+            >
+              {generating ? <CircularProgress size={20} /> : 'Generate Sample'}
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleAddItem}
+              disabled={loading || generating}
+            >
+              Add Task
+            </Button>
+          </Box>
         </Box>
 
         {items.map((item, index) => (
@@ -220,7 +344,7 @@ const Survey: React.FC = () => {
                   <TextField
                     fullWidth
                     type="number"
-                    label="Grade Percentage (0-100)"
+                    label="Weight Percentage (0-100)"
                     value={item.grade_percentage}
                     onChange={(e) => handleItemChange(index, 'grade_percentage', parseFloat(e.target.value))}
                     disabled={loading}
@@ -354,7 +478,8 @@ const Survey: React.FC = () => {
           {loading ? <CircularProgress size={24} /> : 'Submit Survey'}
         </Button>
       </Box>
-    </Container>
+      </Container>
+    </>
   );
 };
 

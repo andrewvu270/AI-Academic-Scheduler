@@ -1,0 +1,14 @@
+[
+  "grade_percentage",
+  "estimated_hours",
+  "difficulty_level",
+  "priority_rating",
+  "days_until_due",
+  "days_between_estimate_and_completion",
+  "task_type_Assignment",
+  "task_type_Exam",
+  "task_type_Lab",
+  "task_type_Project",
+  "task_type_Quiz",
+  "task_type_Reading"
+]

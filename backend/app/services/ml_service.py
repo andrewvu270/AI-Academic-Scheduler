@@ -1,11 +1,10 @@
-import pickle
-import numpy as np
-import pandas as pd
-from typing import Dict, Any, List, Optional
+import json
+import os
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+import numpy as np
 import lightgbm as lgb
-from sklearn.preprocessing import StandardScaler
-from ..config import settings
 
 
 class MLPredictionService:
@@ -13,21 +12,27 @@ class MLPredictionService:
     
     def __init__(self):
         self.model = None
-        self.scaler = None
         self.is_trained = False
+        self.model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../models/lightgbm_survey_model.txt"))
+        self.feature_columns_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../models/lightgbm_feature_columns.json"))
+        self.feature_importance_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../models/lightgbm_feature_importance.json"))
+        self.feature_columns: List[str] = []
         self._load_or_create_model()
     
     def _load_or_create_model(self):
         """Load existing model or create a new one if none exists."""
         try:
-            # In a real implementation, you would load a pre-trained model
-            # For now, we'll create a simple rule-based model
-            self._create_rule_based_model()
-            self.is_trained = True
+            if os.path.exists(self.model_path):
+                self.model = lgb.Booster(model_file=self.model_path)
+                self.feature_columns = self._load_feature_columns()
+                self.is_trained = True
+            else:
+                self._create_rule_based_model()
+                self.is_trained = False
         except Exception as e:
             print(f"Error loading model: {str(e)}")
             self._create_rule_based_model()
-            self.is_trained = True
+            self.is_trained = False
     
     def _create_rule_based_model(self):
         """Create a simple rule-based model for initial predictions."""
@@ -55,9 +60,8 @@ class MLPredictionService:
         try:
             if self.is_trained and self.model:
                 return await self._ml_predict(task_data)
-            else:
-                return self._rule_based_predict(task_data)
-                
+            return self._rule_based_predict(task_data)
+
         except Exception as e:
             print(f"Prediction error: {str(e)}")
             # Fallback to rule-based prediction
@@ -75,16 +79,14 @@ class MLPredictionService:
         """
         # Extract features for ML model
         features = self._extract_features(task_data)
-        
-        # Scale features if scaler is available
-        if self.scaler:
-            features = self.scaler.transform([features])
-        else:
-            features = [features]
-        
-        # Make prediction
+        features = np.array([features])
+
+        missing_columns = [idx for idx, value in enumerate(features[0]) if value is None]
+        if missing_columns:
+            return self._rule_based_predict(task_data)
+
         prediction = self.model.predict(features)[0]
-        
+
         # Ensure prediction is reasonable
         return max(0.5, min(prediction, 40.0))  # Between 0.5 and 40 hours
     
@@ -98,38 +100,21 @@ class MLPredictionService:
         Returns:
             Predicted hours
         """
+        estimated_hours = float(task_data.get("estimated_hours", 0) or 0)
+        grade_percentage = float(task_data.get("grade_percentage", 0) or 0)
         task_type = task_data.get("task_type", "Assignment")
-        grade_percentage = task_data.get("grade_percentage", 0)
-        description_length = len(task_data.get("description", ""))
-        
-        # Base hours for task type
+        difficulty = float(task_data.get("difficulty_level", 3) or 3)
+        priority = float(task_data.get("priority_rating", 3) or 3)
+
         base_hours = self.base_hours.get(task_type, 3.0)
-        
-        # Adjust based on grade percentage
-        grade_multiplier = 1.0 + (grade_percentage / 100.0) * 0.5
-        
-        # Adjust based on description length (complexity indicator)
-        complexity_multiplier = 1.0 + min(description_length / 500, 0.5)
-        
-        # Adjust based on instructor keywords
-        keywords = task_data.get("instructor_keywords", [])
-        keyword_multiplier = 1.0
-        for keyword in keywords:
-            if keyword.lower() in ["critical", "major", "comprehensive"]:
-                keyword_multiplier += 0.3
-            elif keyword.lower() in ["important", "significant"]:
-                keyword_multiplier += 0.2
-            elif keyword.lower() in ["challenging", "difficult"]:
-                keyword_multiplier += 0.15
-        
-        # Calculate final prediction
-        predicted_hours = base_hours * grade_multiplier * complexity_multiplier * keyword_multiplier
-        
-        # Add some randomness to simulate real-world variation
-        noise = np.random.normal(0, 0.1)
-        predicted_hours *= (1 + noise)
-        
-        # Ensure reasonable bounds
+
+        estimate_weight = 0.5 * estimated_hours
+        grade_weight = base_hours * (grade_percentage / 100.0)
+        difficulty_weight = (difficulty / 5.0) * base_hours
+        priority_weight = (priority / 5.0) * base_hours * 0.8
+
+        predicted_hours = estimated_hours + estimate_weight + grade_weight + difficulty_weight + priority_weight
+
         return max(0.5, min(predicted_hours, 40.0))
     
     def _extract_features(self, task_data: Dict[str, Any]) -> List[float]:
@@ -142,43 +127,32 @@ class MLPredictionService:
         Returns:
             List of numerical features
         """
-        features = []
-        
-        # Task type (one-hot encoded)
-        task_types = ["Assignment", "Exam", "Quiz", "Project", "Reading", "Lab"]
+        if not self.feature_columns:
+            self.feature_columns = self._load_feature_columns()
+
+        if not self.feature_columns:
+            raise RuntimeError("Feature columns not configured for ML model")
+
+        feature_values: Dict[str, float] = {
+            "grade_percentage": float(task_data.get("grade_percentage", 0) or 0),
+            "estimated_hours": float(task_data.get("estimated_hours", 0) or 0),
+            "difficulty_level": float(task_data.get("difficulty_level", 3) or 3),
+            "priority_rating": float(task_data.get("priority_rating", 3) or 3),
+            "days_until_due": float(self._calculate_days_until_due(task_data.get("due_date"))),
+            "days_between_estimate_and_completion": float(self._calculate_days_between(task_data.get("due_date"), task_data.get("completion_date"))),
+        }
+
+        for key in list(feature_values.keys()):
+            if not np.isfinite(feature_values[key]):
+                feature_values[key] = 0.0
+
         task_type = task_data.get("task_type", "Assignment")
-        for t in task_types:
-            features.append(1.0 if t == task_type else 0.0)
-        
-        # Grade percentage
-        features.append(float(task_data.get("grade_percentage", 0)))
-        
-        # Description length
-        features.append(float(len(task_data.get("description", ""))))
-        
-        # Days until due
-        due_date = task_data.get("due_date")
-        if due_date:
-            try:
-                due_datetime = datetime.strptime(due_date, "%Y-%m-%d")
-                days_until = (due_datetime - datetime.now()).days
-                features.append(float(max(0, days_until)))
-            except:
-                features.append(30.0)  # Default to 30 days
-        else:
-            features.append(30.0)
-        
-        # Instructor keywords count
-        keywords = task_data.get("instructor_keywords", [])
-        features.append(float(len(keywords)))
-        
-        # Importance indicators
-        important_keywords = ["critical", "major", "important", "mandatory", "required"]
-        importance_score = sum(1 for k in keywords if k.lower() in important_keywords)
-        features.append(float(importance_score))
-        
-        return features
-    
+        for column in self.feature_columns:
+            if column.startswith("task_type_"):
+                feature_values[column] = 1.0 if column == f"task_type_{task_type}" else 0.0
+
+        return [feature_values.get(column, 0.0) for column in self.feature_columns]
+
     async def update_model_with_feedback(self, task_data: Dict[str, Any], actual_hours: float):
         """
         Update the model with actual completion time feedback.
@@ -236,52 +210,56 @@ class MLPredictionService:
         except Exception as e:
             return {"error": str(e)}
     
-    def train_model(self, training_data: List[Dict[str, Any]]):
-        """
-        Train the ML model with historical data.
-        
-        Args:
-            training_data: List of historical task data with actual hours
-        """
+    def _load_feature_columns(self) -> List[str]:
         try:
-            if not training_data or len(training_data) < 10:
-                print("Insufficient training data")
-                return
-            
-            # Prepare training data
-            X = []
-            y = []
-            
-            for data_point in training_data:
-                features = self._extract_features(data_point["task_data"])
-                actual_hours = data_point["actual_hours"]
-                
-                X.append(features)
-                y.append(actual_hours)
-            
-            X = np.array(X)
-            y = np.array(y)
-            
-            # Scale features
-            self.scaler = StandardScaler()
-            X_scaled = self.scaler.fit_transform(X)
-            
-            # Train LightGBM model
-            self.model = lgb.LGBMRegressor(
-                n_estimators=100,
-                learning_rate=0.1,
-                max_depth=6,
-                random_state=42
-            )
-            
-            self.model.fit(X_scaled, y)
-            self.is_trained = True
-            
-            print("Model training completed successfully")
-            
-        except Exception as e:
-            print(f"Model training failed: {str(e)}")
-            self._create_rule_based_model()
+            if os.path.exists(self.feature_columns_path):
+                with open(self.feature_columns_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, list):
+                    return data
+            if os.path.exists(self.feature_importance_path):
+                with open(self.feature_importance_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    return list(data.keys())
+        except Exception as exc:
+            print(f"Failed to load feature columns: {exc}")
+        return [
+            "grade_percentage",
+            "estimated_hours",
+            "difficulty_level",
+            "priority_rating",
+            "days_until_due",
+            "days_between_estimate_and_completion",
+            "task_type_Assignment",
+            "task_type_Exam",
+            "task_type_Quiz",
+            "task_type_Project",
+            "task_type_Lab",
+            "task_type_Reading",
+        ]
+
+    @staticmethod
+    def _calculate_days_until_due(due_date: Optional[str]) -> float:
+        if not due_date:
+            return 30.0
+        try:
+            due_datetime = datetime.strptime(due_date, "%Y-%m-%d")
+            days_until = (due_datetime - datetime.now()).days
+            return float(max(0, days_until))
+        except Exception:
+            return 30.0
+
+    @staticmethod
+    def _calculate_days_between(due_date: Optional[str], completion_date: Optional[str]) -> float:
+        if not due_date:
+            return 0.0
+        try:
+            due_datetime = datetime.strptime(due_date, "%Y-%m-%d")
+            completion_datetime = datetime.strptime(completion_date, "%Y-%m-%d") if completion_date else datetime.now()
+            return float((completion_datetime - due_datetime).days)
+        except Exception:
+            return 0.0
 
 
 # Create a singleton instance

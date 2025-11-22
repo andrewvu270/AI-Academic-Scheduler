@@ -1,0 +1,14 @@
+{
+  "grade_percentage": 84,
+  "estimated_hours": 228,
+  "difficulty_level": 18,
+  "priority_rating": 23,
+  "days_until_due": 52,
+  "days_between_estimate_and_completion": 18,
+  "task_type_Assignment": 0,
+  "task_type_Exam": 2,
+  "task_type_Lab": 1,
+  "task_type_Project": 1,
+  "task_type_Quiz": 10,
+  "task_type_Reading": 0
+}

@@ -1,10 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from typing import List, Dict, Any, Optional
 import json
 from datetime import datetime
 
-from ..database import get_db
 from ..services.ml_service import ml_service
 
 router = APIRouter()
@@ -12,8 +10,7 @@ router = APIRouter()
 
 @router.post("/predict-workload")
 async def predict_workload(
-    task_data: Dict[str, Any],
-    db: Session = Depends(get_db)
+    task_data: Dict[str, Any]
 ):
     """
     Predict workload for a given task using ML model.
@@ -53,8 +50,7 @@ async def predict_workload(
 @router.post("/update-model")
 async def update_model_with_feedback(
     task_data: Dict[str, Any],
-    actual_hours: float,
-    db: Session = Depends(get_db)
+    actual_hours: float
 ):
     """
     Update ML model with actual completion time feedback.
@@ -91,8 +87,7 @@ async def update_model_with_feedback(
 
 @router.post("/train-model")
 async def train_model(
-    training_data_file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    training_data_file: UploadFile = File(...)
 ):
     """
     Train the ML model with historical data.
@@ -155,9 +150,7 @@ async def train_model(
 
 
 @router.get("/model-stats")
-async def get_model_statistics(
-    db: Session = Depends(get_db)
-):
+async def get_model_statistics():
     """
     Get statistics about the current ML model.
     
@@ -180,9 +173,7 @@ async def get_model_statistics(
 
 
 @router.get("/feature-importance")
-async def get_feature_importance(
-    db: Session = Depends(get_db)
-):
+async def get_feature_importance():
     """
     Get feature importance from the trained ML model.
     
@@ -224,9 +215,7 @@ async def get_feature_importance(
 
 
 @router.post("/export-training-data")
-async def export_training_data(
-    db: Session = Depends(get_db)
-):
+async def export_training_data():
     """
     Export user's task completion data for model training.
     
