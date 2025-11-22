@@ -20,6 +20,7 @@ import {
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
 } from '@mui/icons-material';
+import { fetchAllTasks } from '../utils/taskStorage';
 
 interface Task {
   id: string;
@@ -48,9 +49,7 @@ const Schedule: React.FC = () => {
   const fetchTasks = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:8000/api/tasks/?skip=0&limit=1000');
-      if (!response.ok) throw new Error('Failed to fetch tasks');
-      const data = await response.json();
+      const data = await fetchAllTasks();
       setTasks(data.tasks || []);
       setError(null);
     } catch (err) {
