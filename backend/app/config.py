@@ -1,5 +1,11 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+import os
+from dotenv import load_dotenv
+
+# Load .env file from project root
+env_path = os.path.join(os.path.dirname(__file__), "../../.env")
+load_dotenv(env_path)
 
 class Settings(BaseSettings):
     # Database Configuration
@@ -10,6 +16,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: Optional[str] = None
     SUPABASE_KEY: Optional[str] = None
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
+    SUPABASE_DB_PASSWORD: Optional[str] = None
     
     # OpenAI
     OPENAI_API_KEY: Optional[str] = None
@@ -23,10 +30,17 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
     UPLOAD_DIR: str = "uploads"
     
-    # CORS
-    BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8000"]
+    # CORS - Production should only include specific domains
+    BACKEND_CORS_ORIGINS: list[str] = [
+        "http://localhost:3000", 
+        "http://localhost:8000", 
+        "http://127.0.0.1:3000", 
+        "http://127.0.0.1:8000",
+        "https://your-frontend-domain.com"  # Replace with actual production domain
+    ]
     
     class Config:
-        env_file = "../.env"
+        # Pydantic will read from environment variables
+        case_sensitive = False
 
 settings = Settings()

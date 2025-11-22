@@ -87,6 +87,18 @@ const Auth: React.FC = () => {
       localStorage.setItem('user_email', data.email);
       localStorage.setItem('user_id', data.user_id);
 
+      // Migrate local guest data to Supabase
+      try {
+        const { migrateLocalDataToSupabase, hasLocalGuestData } = await import('../utils/dataMigration');
+        if (hasLocalGuestData()) {
+          console.log('Migrating local guest data to Supabase...');
+          const migrationResult = await migrateLocalDataToSupabase(data.access_token, data.user_id);
+          console.log('Migration result:', migrationResult);
+        }
+      } catch (err) {
+        console.error('Failed to migrate guest data:', err);
+      }
+
       setSuccess('Login successful! Redirecting...');
       setTimeout(() => navigate('/'), 1500);
     } catch (err) {
@@ -135,19 +147,16 @@ const Auth: React.FC = () => {
       localStorage.setItem('user_email', data.email);
       localStorage.setItem('user_id', data.user_id);
       
-      // Migrate guest data if exists
-      const guestSessionId = localStorage.getItem('guest_session_id');
-      if (guestSessionId) {
-        try {
-          await fetch(`http://localhost:8000/api/guest/migrate/${guestSessionId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: data.user_id }),
-          });
-          localStorage.removeItem('guest_session_id');
-        } catch (err) {
-          console.error('Failed to migrate guest data:', err);
+      // Migrate local guest data to Supabase
+      try {
+        const { migrateLocalDataToSupabase, hasLocalGuestData } = await import('../utils/dataMigration');
+        if (hasLocalGuestData()) {
+          console.log('Migrating local guest data to Supabase...');
+          const migrationResult = await migrateLocalDataToSupabase(data.access_token, data.user_id);
+          console.log('Migration result:', migrationResult);
         }
+      } catch (err) {
+        console.error('Failed to migrate guest data:', err);
       }
 
       setSuccess('Registration successful! Redirecting...');

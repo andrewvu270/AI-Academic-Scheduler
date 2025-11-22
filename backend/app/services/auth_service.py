@@ -102,10 +102,20 @@ class AuthService:
     
     @staticmethod
     async def verify_user_session(token: str) -> Optional[Dict[str, Any]]:
-        """Verify a user session token with Supabase"""
+        """Verify a user session token"""
+        # First try to verify as our JWT token
+        payload = AuthService.verify_token(token)
+        if payload:
+            # Return user data from JWT payload
+            return {
+                "id": payload.get("sub"),
+                "email": payload.get("email")
+            }
+        
+        # If that fails, try Supabase (for tokens from Supabase auth)
         supabase = get_supabase()
         if not supabase:
-            raise Exception("Supabase not configured")
+            return None
         
         try:
             response = supabase.auth.get_user(token)
