@@ -64,4 +64,5 @@ app.include_router(study_plan.router, prefix="/api/study-plan", tags=["study-pla
 
 if __name__ == "__main__":
     import uvicorn
+    port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=8000)
