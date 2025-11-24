@@ -19,6 +19,7 @@ import {
   Warning as WarningIcon,
   Error as ErrorIcon,
 } from '@mui/icons-material';
+import { API_BASE_URL } from '../config/api';
 
 interface StoredTask {
   id: string;
@@ -140,7 +141,7 @@ const Dashboard: React.FC = () => {
         previewFormData.append('file', file);
         previewFormData.append('course_name', file.name.replace('.pdf', ''));
 
-        const previewResponse = await fetch(`${(import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/upload/preview`, {
+        const previewResponse = await fetch(`${API_BASE_URL}/api/upload/preview`, {
           method: 'POST',
           body: previewFormData,
         });
@@ -165,7 +166,7 @@ const Dashboard: React.FC = () => {
               courseHeaders['Authorization'] = `Bearer ${accessToken}`;
             }
             
-            const courseResponse = await fetch(`${(import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/courses/`, {
+            const courseResponse = await fetch(`${API_BASE_URL}/api/courses/`, {
               method: 'POST',
               headers: courseHeaders,
               body: JSON.stringify({
@@ -203,7 +204,7 @@ const Dashboard: React.FC = () => {
           headers['Authorization'] = `Bearer ${accessToken}`;
         }
 
-        const uploadResponse = await fetch(`${(import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000'}/api/upload/syllabus`, {
+        const uploadResponse = await fetch(`${API_BASE_URL}/api/upload/syllabus`, {
           method: 'POST',
           headers,
           body: uploadFormData,

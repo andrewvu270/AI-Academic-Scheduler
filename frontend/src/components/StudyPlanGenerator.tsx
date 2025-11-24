@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { API_BASE_URL } from '../config/api';
 import { 
   Button, 
   Dialog, 
@@ -32,7 +33,7 @@ const StudyPlanGenerator: React.FC<StudyPlanGeneratorProps> = ({ tasks, open, on
     
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/api/study-plan/generate', {
+      const response = await fetch(`${API_BASE_URL}/api/study-plan/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

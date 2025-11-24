@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config/api';
 import {
   Container,
   Grid,
@@ -46,7 +47,7 @@ const Courses: React.FC = () => {
   const fetchCourses = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:8000/api/courses');
+      const response = await fetch(`${API_BASE_URL}/api/courses`);
       if (!response.ok) throw new Error('Failed to fetch courses');
       const data = await response.json();
       setCourses(data);
@@ -60,7 +61,7 @@ const Courses: React.FC = () => {
 
   const handleAddCourse = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/courses', {
+      const response = await fetch(`${API_BASE_URL}/api/courses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newCourse),
