@@ -18,17 +18,16 @@ An intelligent academic planning system that helps students optimize their study
 
 ## 🛠️ Technology Stack
 
-### Backend
+### Backend deployed on Google Cloud Run
 - **FastAPI**: Modern, fast web framework for building APIs
 - **Python**: Core programming language
-- **SQLAlchemy**: SQL toolkit and ORM
 - **Supabase**: Primary database (PostgreSQL backend)
 - **OpenAI API**: For intelligent text extraction
 - **LightGBM**: Machine learning for workload prediction
 - **pdfplumber**: PDF text extraction
 - **Tesseract**: OCR for image-based documents
 
-### Frontend
+### Frontend deployed on CLoudflare
 - **React**: User interface library
 - **TypeScript**: Type-safe JavaScript
 - **Material-UI**: React component library
@@ -96,27 +95,6 @@ An intelligent academic planning system that helps students optimize their study
    - Monitor completion rates
    - View study analytics
    - Track time spent on tasks
-
-## 🗺️ Roadmap
-
-### Version 1.0 (Current)
-- [x] Basic syllabus processing
-- [x] Task extraction and weighting
-- [x] Schedule generation
-- [x] User authentication
-- [x] Study session tracking
-
-### Version 1.1 (Planned)
-- [ ] Mobile app (React Native)
-- [ ] Calendar integration
-- [ ] Advanced analytics
-- [ ] Study group features
-
-### Version 2.0 (Future)
-- [ ] Collaborative scheduling
-- [ ] AI-powered study recommendations
-- [ ] Integration with learning management systems
-- [ ] Advanced ML models for personalization
 
 ## 🔒 Security Considerations
 
