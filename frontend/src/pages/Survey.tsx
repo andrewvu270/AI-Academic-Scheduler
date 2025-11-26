@@ -247,6 +247,13 @@ const Survey: React.FC = () => {
         </Typography>
         <Typography variant="body1" color="textSecondary" sx={{ mb: 2 }}>
           Help us improve our AI scheduling model by sharing your task completion data.
+        </Typography>
+        <Alert severity="info" sx={{ mb: 3 }}>
+          <Typography variant="body2">
+            🤖 <strong>How your survey helps:</strong> Your task completion data trains our LightGBM machine learning model to better predict task duration and difficulty. Each submission improves the accuracy of our scheduling recommendations for all users!
+          </Typography>
+        </Alert>
+        <Typography variant="body1" color="textSecondary" sx={{ mb: 2 }}>
           Your responses will be used to train a machine learning model for better task prioritization.
         </Typography>
       </Box>
