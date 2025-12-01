@@ -1,6 +1,18 @@
-# AI Academic Scheduler
+# MyDesk
 
-An intelligent academic planning system that helps students optimize their study schedules by extracting deadlines from syllabi, predicting workload, and generating optimized daily study plans using machine learning.
+**An intelligent productivity assistant powered by multi-agent AI**
+
+MyDesk helps you optimize your work and study by extracting tasks from documents, predicting workload and stress levels, and generating optimized schedules using machine learning and LLM-powered agents.
+
+## 🚀 What Makes MyDesk Unique
+
+- **Multi-Agent Architecture**: 5 specialized AI agents working together orchestrated by an MCP (Master Control Program)
+- **Hybrid LLM + ML Predictions**: Combines GPT-4 reasoning with calibrated machine learning for accurate workload estimates
+- **Stress & Burnout Prevention**: Predicts stress levels and warns when workload is too high
+- **Natural Language Interface**: Ask questions like "What's my busiest day this week?" or "Move low-effort tasks to tomorrow"
+- **Multi-Domain Support**: Not just for students - works for professionals, freelancers, and anyone managing tasks
+- **Smart Scheduling**: Automatically balances workload across days to avoid burnout
+- **Intelligent Task Parsing**: Upload PDFs, documents, or paste text - AI extracts all tasks and deadlines
 
 ## Features
 
@@ -18,12 +30,20 @@ An intelligent academic planning system that helps students optimize their study
 
 ## Technology Stack
 
+### Multi-Agent System
+- **MCP Orchestrator**: Coordinates all agents and manages workflows
+- **Task Parsing Agent**: LLM-powered extraction from PDFs, documents, emails
+- **Workload Prediction Agent**: Hybrid LLM + ML for effort and stress estimation
+- **Prioritization Agent**: Intelligent task ranking with explanations
+- **Schedule Optimization Agent**: Workload balancing and burnout prevention
+- **Natural Language Agent**: Process queries and commands in plain English
+
 ### Backend deployed on Google Cloud Run
 - **FastAPI**: Modern, fast web framework for building APIs
 - **Python**: Core programming language
 - **Supabase**: Primary database (PostgreSQL backend)
-- **OpenAI API**: For intelligent text extraction
-- **LightGBM**: Machine learning for workload prediction
+- **OpenAI GPT-4**: LLM for intelligent reasoning and natural language
+- **LightGBM**: Machine learning for workload prediction calibration
 - **pdfplumber**: PDF text extraction
 - **Tesseract**: OCR for image-based documents
 

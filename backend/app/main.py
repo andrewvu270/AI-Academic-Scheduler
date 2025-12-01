@@ -9,7 +9,7 @@ from .config import settings
 import os
 
 # Import routers
-from .api import courses, tasks, schedule, upload, ml, auth, survey, guest, study_plan
+from .api import courses, tasks, schedule, upload, ml, auth, survey, guest, study_plan, agents
 
 # Rate limiter
 limiter = Limiter(
@@ -22,8 +22,9 @@ limiter = Limiter(
 print("CORS Origins:", settings.BACKEND_CORS_ORIGINS)
 
 app = FastAPI(
-    title="AI Academic Scheduler",
-    version="1.0.0"
+    title="MyDesk API",
+    version="2.0.0",
+    description="Intelligent productivity assistant with multi-agent system"
 )
 
 # Add CORS middleware directly to app
@@ -44,7 +45,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 @app.get("/")
 @limiter.limit("60/hour")
 async def root(request: Request):
-    return {"message": "AI Academic Scheduler API"}
+    return {"message": "MyDesk API - Intelligent Productivity Assistant"}
 
 @app.get("/health")
 @limiter.limit("300/hour")
@@ -52,6 +53,7 @@ async def health_check(request: Request):
     return {"status": "healthy"}
 
 # Include routers (rate limiting will be applied at individual endpoint level)
+app.include_router(agents.router)  # New agent endpoints
 app.include_router(courses.router, prefix="/api/courses", tags=["courses"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(schedule.router, prefix="/api/schedule", tags=["schedule"])
