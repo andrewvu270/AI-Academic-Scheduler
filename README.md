@@ -2,21 +2,21 @@
 
 An intelligent academic planning system that helps students optimize their study schedules by extracting deadlines from syllabi, predicting workload, and generating optimized daily study plans using machine learning.
 
-## 🚀 Features
+## Features
 
-- **📄 Syllabus Processing**: Upload PDF or image syllabi and automatically extract all assignments, exams, and deadlines
-- **🤖 AI-Powered Extraction**: Uses OpenAI GPT to intelligently parse and categorize academic tasks
-- **👤 Guest Mode**: Try the app without creating an account - data stored locally in browser
-- **☁️ Cloud Sync**: Logged-in users get automatic cloud storage and sync across devices
-- **🔄 Seamless Migration**: Guest data automatically migrates to cloud when you create an account
-- **⚖️ Smart Weighting**: Automatically calculates task importance based on grade percentage, task type, and instructor emphasis
-- **📊 Workload Prediction**: ML models predict how much time each task will take based on historical data
-- **📅 Optimized Scheduling**: Generates daily and weekly study schedules optimized for productivity
-- **🔔 Smart Notifications**: Timely reminders for upcoming deadlines and study sessions
-- **📈 Progress Tracking**: Monitor study habits and task completion over time
-- **📱 Responsive Design**: Works seamlessly on desktop and mobile devices
+- **Syllabus Processing**: Upload PDF or image syllabi and automatically extract all assignments, exams, and deadlines
+- **AI-Powered Extraction**: Uses OpenAI GPT to intelligently parse and categorize academic tasks
+- **Guest Mode**: Try the app without creating an account - data stored locally in browser
+- **Cloud Sync**: Logged-in users get automatic cloud storage and sync across devices
+- **Seamless Migration**: Guest data automatically migrates to cloud when you create an account
+- **Smart Weighting**: Automatically calculates task importance based on grade percentage, task type, and instructor emphasis
+- **Workload Prediction**: ML models predict how much time each task will take based on historical data
+- **Optimized Scheduling**: Generates daily and weekly study schedules optimized for productivity
+- **Smart Notifications**: Timely reminders for upcoming deadlines and study sessions
+- **Progress Tracking**: Monitor study habits and task completion over time
+- **Responsive Design**: Works seamlessly on desktop and mobile devices
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 ### Backend deployed on Google Cloud Run
 - **FastAPI**: Modern, fast web framework for building APIs
@@ -37,7 +37,7 @@ An intelligent academic planning system that helps students optimize their study
 ### Infrastructure
 - **Docker**: Containerization (for backend services)
 
-## 📋 Usage Guide
+## Usage Guide
 
 ### Guest Mode (No Account Required)
 
@@ -96,7 +96,7 @@ An intelligent academic planning system that helps students optimize their study
    - View study analytics
    - Track time spent on tasks
 
-## 🔒 Security Considerations
+## Security Considerations
 
 - All API endpoints require authentication
 - JWT tokens with expiration
@@ -106,7 +106,7 @@ An intelligent academic planning system that helps students optimize their study
 - Environment variable protection
 - SQL injection prevention through ORM
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)

@@ -90,15 +90,40 @@ class AuthService:
             raise Exception("Supabase not configured")
         
         try:
+            # Use appropriate redirect URI based on environment
+            from ..config import settings
+            
+            # Get backend URL from settings or use localhost for development
+            backend_url = getattr(settings, 'BACKEND_URL', None) or "http://localhost:8000"
+            redirect_uri = f"{backend_url}/api/auth/google/callback"
+            
             response = supabase.auth.sign_in_with_oauth({
                 "provider": "google",
                 "options": {
-                    "redirectTo": "http://localhost:3000/auth/callback"
+                    "redirectTo": redirect_uri
                 }
             })
             return response.url if hasattr(response, 'url') else None
         except Exception as e:
             raise Exception(f"Google auth failed: {str(e)}")
+    
+    @staticmethod
+    async def handle_google_callback(code: str) -> Dict[str, Any]:
+        """Handle Google OAuth callback and exchange code for session"""
+        supabase = get_supabase()
+        if not supabase:
+            raise Exception("Supabase not configured")
+        
+        try:
+            # Exchange the authorization code for a session
+            response = supabase.auth.exchange_code_for_session(code)
+            return {
+                "user": response.user.model_dump() if response.user else None,
+                "session": response.session.model_dump() if response.session else None,
+                "access_token": response.session.access_token if response.session else None,
+            }
+        except Exception as e:
+            raise Exception(f"Google callback failed: {str(e)}")
     
     @staticmethod
     async def verify_user_session(token: str) -> Optional[Dict[str, Any]]:

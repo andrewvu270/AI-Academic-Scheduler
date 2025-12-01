@@ -6,6 +6,7 @@ import Tasks from './pages/Tasks';
 import Schedule from './pages/Schedule';
 import Survey from './pages/Survey';
 import Auth from './pages/Auth';
+import GoogleCallback from './pages/GoogleCallback';
 import Navigation from './components/Navigation';
 import ProtectedRoute from './components/ProtectedRoute';
 import { getOrCreateGuestSession } from './utils/guestMode';
@@ -23,6 +24,7 @@ function App() {
     <BrowserRouter>
         <Routes>
           <Route path="/auth" element={<Auth />} />
+          <Route path="/auth/callback" element={<GoogleCallback />} />
           <Route
             path="/"
             element={

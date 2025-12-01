@@ -21,7 +21,7 @@ class AuthResponse(BaseModel):
     email: str
 
 class GoogleAuthResponse(BaseModel):
-    auth_url: str
+    google_url: str
 
 @router.post("/register", response_model=AuthResponse)
 async def register(request: RegisterRequest):
@@ -109,16 +109,60 @@ async def login(request: LoginRequest):
     except Exception as e:
         raise HTTPException(status_code=401, detail=str(e))
 
-@router.get("/google/auth-url", response_model=GoogleAuthResponse)
+@router.get("/google-url", response_model=GoogleAuthResponse)
 async def get_google_auth_url():
     """Get Google OAuth authentication URL"""
     try:
         auth_url = await AuthService.get_google_auth_url()
         if not auth_url:
             raise HTTPException(status_code=500, detail="Failed to generate auth URL")
-        return GoogleAuthResponse(auth_url=auth_url)
+        return GoogleAuthResponse(google_url=auth_url)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/google/callback", response_model=AuthResponse)
+async def google_callback(code: str, state: str = None):
+    """Handle Google OAuth callback"""
+    try:
+        from ..database import get_supabase_admin
+        from datetime import datetime
+        
+        result = await AuthService.handle_google_callback(code)
+        if not result.get("user"):
+            raise HTTPException(status_code=400, detail="Google authentication failed")
+        
+        user = result["user"]
+        
+        # Ensure user exists in public.users table
+        try:
+            supabase_admin = get_supabase_admin()
+            # Check if user exists
+            existing = supabase_admin.table("users").select("id").eq("id", user.get("id")).execute()
+            if not existing.data:
+                # Create user in public.users table
+                user_data = {
+                    "id": user.get("id"),
+                    "email": user.get("email"),
+                    "full_name": user.get("user_metadata", {}).get("full_name", ""),
+                    "created_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.utcnow().isoformat()
+                }
+                supabase_admin.table("users").insert(user_data).execute()
+                print(f"[AUTH] Created Google user in public.users: {user.get('id')}")
+        except Exception as e:
+            print(f"[AUTH] Error ensuring Google user in public.users: {str(e)}")
+        
+        access_token = result.get("access_token") or AuthService.create_access_token(
+            data={"sub": user.get("id"), "email": user.get("email")}
+        )
+        
+        return AuthResponse(
+            access_token=access_token,
+            user_id=user.get("id"),
+            email=user.get("email")
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/verify", response_model=dict)
 async def verify_token(token: str):
