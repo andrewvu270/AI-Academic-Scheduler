@@ -11,10 +11,12 @@ import logging
 
 from .agent_base import AgentResponse, AgentStatus
 from .task_parsing_agent import task_parsing_agent
+from .enhanced_task_parsing_agent import enhanced_task_parsing_agent
 from .workload_prediction_agent import workload_prediction_agent
 from .prioritization_agent import prioritization_agent
 from .schedule_optimization_agent import schedule_optimization_agent
 from .natural_language_agent import natural_language_agent
+from ..services.mcp_service import mcp_service
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +24,13 @@ logger = logging.getLogger(__name__)
 class WorkflowType:
     """Standard workflow types"""
     PARSE_DOCUMENT = "parse_document"
+    PARSE_DOCUMENT_ENHANCED = "parse_document_enhanced"  # New enhanced workflow
     PREDICT_WORKLOAD = "predict_workload"
     PRIORITIZE_TASKS = "prioritize_tasks"
     GENERATE_SCHEDULE = "generate_schedule"
     NATURAL_LANGUAGE_QUERY = "natural_language_query"
     FULL_PIPELINE = "full_pipeline"  # Parse → Predict → Prioritize → Schedule
+    FULL_PIPELINE_ENHANCED = "full_pipeline_enhanced"  # With MCP tools
 
 
 class MCPOrchestrator:
@@ -44,17 +48,19 @@ class MCPOrchestrator:
     def __init__(self):
         self.logger = logger
         self.context: Dict[str, Any] = {}
+        self.mcp_service = mcp_service
         
-        # Initialize agents
+        # Initialize agents (both original and enhanced)
         self.agents = {
             "task_parsing": task_parsing_agent,
+            "task_parsing_enhanced": enhanced_task_parsing_agent,  # New enhanced agent
             "workload_prediction": workload_prediction_agent,
             "prioritization": prioritization_agent,
             "schedule_optimization": schedule_optimization_agent,
             "natural_language": natural_language_agent
         }
         
-        self.logger.info("MCP Orchestrator initialized with 5 agents")
+        self.logger.info("MCP Orchestrator initialized with 6 agents (including enhanced task parsing)")
     
     async def execute_workflow(
         self, 
@@ -83,6 +89,9 @@ class MCPOrchestrator:
         if workflow_type == WorkflowType.PARSE_DOCUMENT:
             return await self._workflow_parse_document(input_data)
         
+        elif workflow_type == WorkflowType.PARSE_DOCUMENT_ENHANCED:
+            return await self._workflow_parse_document_enhanced(input_data)
+        
         elif workflow_type == WorkflowType.PREDICT_WORKLOAD:
             return await self._workflow_predict_workload(input_data)
         
@@ -97,6 +106,9 @@ class MCPOrchestrator:
         
         elif workflow_type == WorkflowType.FULL_PIPELINE:
             return await self._workflow_full_pipeline(input_data)
+        
+        elif workflow_type == WorkflowType.FULL_PIPELINE_ENHANCED:
+            return await self._workflow_full_pipeline_enhanced(input_data)
         
         else:
             return {
@@ -365,6 +377,7 @@ class MCPOrchestrator:
         """Get status of all agents"""
         return {
             "mcp_status": "active",
+            "mcp_servers": list(self.mcp_service.server_processes.keys()),
             "agents": {
                 name: agent.get_state()
                 for name, agent in self.agents.items()
@@ -372,6 +385,116 @@ class MCPOrchestrator:
             "context": self.context,
             "timestamp": datetime.now().isoformat()
         }
+    
+    async def _workflow_parse_document_enhanced(
+        self, 
+        input_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Enhanced document parsing workflow with MCP tools"""
+        self.logger.info("Starting enhanced document parsing workflow")
+        
+        try:
+            # Use enhanced task parsing agent with MCP capabilities
+            agent = self.agents["task_parsing_enhanced"]
+            response = await agent.process(input_data, self.context)
+            
+            if response.status == AgentStatus.COMPLETED:
+                return {
+                    "success": True,
+                    "tasks": response.data.get("tasks", []),
+                    "mcp_tools_used": ["filesystem", "memory", "web_search"],
+                    "enhanced_features": ["research_insights", "memory_context"],
+                    "explanation": response.explanation
+                }
+            else:
+                return self._format_error_response("task_parsing_enhanced", response)
+                
+        except Exception as e:
+            self.logger.error(f"Enhanced document parsing workflow failed: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "workflow": "parse_document_enhanced"
+            }
+    
+    async def _workflow_full_pipeline_enhanced(
+        self, 
+        input_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Enhanced full pipeline with MCP tools"""
+        self.logger.info("Starting enhanced full pipeline workflow")
+        
+        results = {
+            "success": True,
+            "stages": {},
+            "tasks": [],
+            "mcp_enhancements": {},
+            "total_tasks": 0
+        }
+        
+        try:
+            # Stage 1: Enhanced Document Parsing
+            parse_result = await self._workflow_parse_document_enhanced(input_data)
+            results["stages"]["parsing"] = {
+                "success": parse_result["success"],
+                "mcp_tools_used": parse_result.get("mcp_tools_used", [])
+            }
+            
+            if not parse_result["success"]:
+                return parse_result
+            
+            tasks = parse_result["tasks"]
+            results["mcp_enhancements"]["research_insights"] = [
+                task.get("research_insights") for task in tasks 
+                if task.get("research_insights")
+            ]
+            
+            # Stage 2: Workload Prediction
+            workload_input = {"tasks": tasks}
+            workload_response = await self.agents["workload_prediction"].process(workload_input, self.context)
+            
+            if workload_response.success:
+                enriched_tasks = workload_response.data.get("tasks", tasks)
+                results["stages"]["workload_prediction"] = {"success": True}
+            else:
+                enriched_tasks = tasks
+                results["stages"]["workload_prediction"] = {"success": False}
+            
+            # Stage 3: Prioritization
+            prioritize_input = {"tasks": enriched_tasks}
+            prioritize_response = await self.agents["prioritization"].process(prioritize_input, self.context)
+            
+            if prioritize_response.success:
+                prioritized_tasks = prioritize_response.data.get("prioritized_tasks", enriched_tasks)
+                results["stages"]["prioritization"] = {"success": True}
+            else:
+                prioritized_tasks = enriched_tasks
+                results["stages"]["prioritization"] = {"success": False}
+            
+            # Stage 4: Schedule Optimization
+            schedule_input = {"tasks": prioritized_tasks}
+            schedule_response = await self.agents["schedule_optimization"].process(schedule_input, self.context)
+            
+            if schedule_response.success:
+                results["schedule"] = schedule_response.data.get("schedule", {})
+                results["recommendations"] = schedule_response.data.get("recommendations", [])
+                results["stages"]["scheduling"] = {"success": True}
+            else:
+                results["stages"]["scheduling"] = {"success": False}
+            
+            # Final results
+            results["tasks"] = prioritized_tasks
+            results["total_tasks"] = len(prioritized_tasks)
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Enhanced full pipeline workflow failed: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "workflow": "full_pipeline_enhanced"
+            }
 
 
 # Create singleton instance

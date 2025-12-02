@@ -64,72 +64,12 @@ const Tasks: React.FC = () => {
     try {
       setLoading(true);
       const data = await fetchAllTasks();
-
-      // Enhance tasks with agent predictions
-      try {
-        const userId = localStorage.getItem('access_token') ? 'registered' : 'guest';
-        
-        // Get workload predictions for all tasks
-        const tasksWithPredictions = await Promise.all(
-          data.tasks.map(async (task: Task) => {
-            try {
-              const prediction = await agentService.predictWorkload({
-                task,
-                use_hybrid: true,
-                user_id: userId,
-              });
-              
-              return {
-                ...task,
-                predicted_hours: prediction.predicted_hours,
-                stress_level: prediction.stress_level,
-                priority_score: prediction.priority_score,
-                ai_insights: prediction.ai_insights,
-              };
-            } catch (err) {
-              console.error('Error predicting workload for task:', task.id, err);
-              return task;
-            }
-          })
-        );
-
-        // Get AI prioritization for pending tasks
-        const pendingTasks = tasksWithPredictions.filter(task => task.status === 'pending');
-        if (pendingTasks.length > 0) {
-          try {
-            const prioritization = await agentService.prioritizeTasks({
-              tasks: pendingTasks,
-              user_id: userId,
-            });
-            
-            // Update tasks with AI priority scores
-            const prioritizedTasks = tasksWithPredictions.map(task => {
-              const priorityInfo = prioritization.prioritized_tasks?.find((p: any) => p.task_id === task.id);
-              if (priorityInfo) {
-                return {
-                  ...task,
-                  priority_score: priorityInfo.priority_score,
-                  ai_insights: priorityInfo.ai_insights,
-                  reasoning: priorityInfo.reasoning,
-                };
-              }
-              return task;
-            });
-            
-            setTasks(prioritizedTasks);
-          } catch (priorityErr) {
-            console.error('Error getting AI prioritization:', priorityErr);
-            setTasks(tasksWithPredictions);
-          }
-        } else {
-          setTasks(tasksWithPredictions);
-        }
-      } catch (predictionError) {
-        console.error('Error getting agent predictions:', predictionError);
-        // Fall back to original tasks if prediction fails
-        setTasks(data.tasks);
-      }
+      
+      // Set tasks directly without agent predictions for now
+      setTasks(data.tasks);
+      setError(null);
     } catch (err) {
+      console.error('Error fetching tasks:', err);
       setError(err instanceof Error ? err.message : 'Failed to load tasks');
     } finally {
       setLoading(false);

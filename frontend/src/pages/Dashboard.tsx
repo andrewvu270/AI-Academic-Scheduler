@@ -17,7 +17,6 @@ import {
   AccessTime as DueSoonIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
-import { agentService, FullPipelineRequest } from '../utils/agentService';
 import NaturalLanguageQuery from '../components/NaturalLanguageQuery';
 import StressVisualization from '../components/StressVisualization';
 
@@ -139,7 +138,7 @@ const Dashboard: React.FC = () => {
         // Extract text from PDF using the existing upload endpoint first
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('course_name', file.name.replace('.pdf', ''));
+        formData.append('course_id', file.name.replace('.pdf', ''));
 
         const uploadResponse = await fetch(`${API_BASE_URL}/api/upload/syllabus`, {
           method: 'POST',
@@ -157,8 +156,8 @@ const Dashboard: React.FC = () => {
 
         const uploadData = await uploadResponse.json();
         
-        // Use the agent pipeline to process the extracted text
-        if (uploadData.extracted_text || uploadData.raw_text) {
+        // Store the extracted tasks directly
+        if (uploadData.tasks && uploadData.tasks.length > 0) {
           const courseName = file.name.replace('.pdf', '').replace(/_/g, ' ');
           const userId = localStorage.getItem('access_token') ? 'registered' : 'guest';
           
@@ -187,57 +186,40 @@ const Dashboard: React.FC = () => {
             }
           } catch (err) {
             console.error('Error creating course:', err);
+            // Generate fallback course ID for guest mode
+            courseId = `course_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           }
 
-          // Run the full agent pipeline
-          const pipelineRequest: FullPipelineRequest = {
-            text: uploadData.extracted_text || uploadData.raw_text,
-            source_type: 'pdf',
-            schedule_days: 7,
-            user_id: userId,
-            course_id: courseId || undefined,
-          };
+          // Store course data for guest mode
+          if (userId === 'guest' && courseId) {
+            const courseData = {
+              id: courseId,
+              name: courseName,
+              code: courseName.substring(0, 10).toUpperCase(),
+              description: `Course from ${file.name}`,
+              user_id: 'guest',
+              created_at: new Date().toISOString(),
+            };
+            localStorage.setItem(`course_${courseId}`, JSON.stringify(courseData));
+          }
 
-          const pipelineResult = await agentService.fullPipeline(pipelineRequest);
-          
-          // Store the enhanced results
-          if (pipelineResult.tasks && courseId) {
-            // Store course data for guest mode
+          // Store tasks directly from upload response
+          uploadData.tasks.forEach((task: any) => {
+            const enhancedTask = {
+              ...task,
+              user_id: userId,
+              course_id: courseId,
+            };
+            
             if (userId === 'guest') {
-              const courseData = {
-                id: courseId,
-                name: courseName,
-                code: courseName.substring(0, 10).toUpperCase(),
-                description: `Course from ${file.name}`,
-                user_id: 'guest',
-                created_at: new Date().toISOString(),
-              };
-              localStorage.setItem(`course_${courseId}`, JSON.stringify(courseData));
+              localStorage.setItem(`task_${task.id}`, JSON.stringify(enhancedTask));
             }
+          });
 
-            // Store enhanced tasks with workload predictions and priorities
-            pipelineResult.tasks.forEach((task: any) => {
-              const enhancedTask = {
-                ...task,
-                user_id: userId,
-                course_id: courseId,
-                // Add agent-generated insights
-                predicted_hours: task.predicted_hours,
-                stress_level: task.stress_level,
-                priority_score: task.priority_score,
-                ai_insights: task.ai_insights,
-              };
-              
-              if (userId === 'guest') {
-                localStorage.setItem(`task_${task.id}`, JSON.stringify(enhancedTask));
-              }
-            });
-
-            // Store course tasks list for guest mode
-            if (userId === 'guest') {
-              const courseTaskIds = pipelineResult.tasks.map((t: any) => t.id);
-              localStorage.setItem(`course_${courseId}_tasks`, JSON.stringify(courseTaskIds));
-            }
+          // Store course tasks list for guest mode
+          if (userId === 'guest' && courseId) {
+            const courseTaskIds = uploadData.tasks.map((t: any) => t.id);
+            localStorage.setItem(`course_${courseId}_tasks`, JSON.stringify(courseTaskIds));
           }
         }
 

@@ -9,7 +9,7 @@ from .config import settings
 import os
 
 # Import routers
-from .api import courses, tasks, schedule, upload, ml, auth, survey, guest, study_plan, agents
+from .api import courses, tasks, schedule, upload, ml, auth, survey, guest, study_plan, agents, mcp
 
 # Rate limiter
 limiter = Limiter(
@@ -54,6 +54,7 @@ async def health_check(request: Request):
 
 # Include routers (rate limiting will be applied at individual endpoint level)
 app.include_router(agents.router)  # New agent endpoints
+app.include_router(mcp.router)  # MCP integration endpoints
 app.include_router(courses.router, prefix="/api/courses", tags=["courses"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 app.include_router(schedule.router, prefix="/api/schedule", tags=["schedule"])

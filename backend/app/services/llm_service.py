@@ -151,7 +151,8 @@ class LLMService:
     async def extract_tasks_from_text(
         self, 
         text: str, 
-        source_type: str = "document"
+        source_type: str = "document",
+        context: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """
         Extract tasks, deadlines, and details from unstructured text.
