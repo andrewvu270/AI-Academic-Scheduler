@@ -30,6 +30,7 @@ import {
 import { API_BASE_URL } from '../config/api';
 import { Task } from '../types/task';
 import { fetchAllTasks } from '../utils/taskStorage';
+import PomodoroTimer from '../components/PomodoroTimer';
 
 interface StudySession {
   id: string;
@@ -62,10 +63,30 @@ const StudyPlan: React.FC = () => {
   const [studyHours, setStudyHours] = useState(3);
   const [daysToPlan, setDaysToPlan] = useState(7);
   const [selectedSession, setSelectedSession] = useState<StudySession | null>(null);
+  const [userLearningStyle, setUserLearningStyle] = useState<string>('visual');
 
   useEffect(() => {
     fetchTasks();
+    loadLearningStyle();
   }, []);
+
+  const loadLearningStyle = () => {
+    try {
+      const stored = localStorage.getItem('learningStyle');
+      if (stored) {
+        const profile = JSON.parse(stored);
+        const style = profile.style;
+        if (style) {
+          const dominant = Object.entries(style).reduce((a, b) => 
+            style[a[0] as keyof typeof style] > style[b[0] as keyof typeof style] ? a : b
+          )[0];
+          setUserLearningStyle(dominant);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load learning style:', error);
+    }
+  };
 
   const fetchTasks = async () => {
     try {
@@ -456,6 +477,17 @@ const StudyPlan: React.FC = () => {
                   ))}
                 </Box>
               </Paper>
+            </Grid>
+          )}
+
+          {/* Pomodoro Timer for Active Session */}
+          {selectedSession && (
+            <Grid item xs={12}>
+              <PomodoroTimer
+                taskTitle={selectedSession.task_title}
+                learningStyle={userLearningStyle}
+                studyTips={selectedSession.research_tips || []}
+              />
             </Grid>
           )}
         </Grid>

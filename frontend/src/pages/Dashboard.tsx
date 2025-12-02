@@ -19,6 +19,7 @@ import {
 import { API_BASE_URL } from '../config/api';
 import NaturalLanguageQuery from '../components/NaturalLanguageQuery';
 import StressVisualization from '../components/StressVisualization';
+import LearningStyleProfile from '../components/LearningStyleProfile';
 
 interface StoredTask {
   id: string;
@@ -297,6 +298,9 @@ const Dashboard: React.FC = () => {
 
       {/* AI Assistant */}
       <NaturalLanguageQuery />
+
+      {/* Learning Style Profile */}
+      <LearningStyleProfile />
 
       {/* Stress Visualization */}
       <StressVisualization />
