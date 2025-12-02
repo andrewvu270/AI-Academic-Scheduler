@@ -9,6 +9,14 @@ import {
   Tooltip,
   Button,
   useTheme,
+  Fab,
+  Badge,
+  Avatar,
+  LinearProgress,
+  Grow,
+  Fade,
+  Zoom,
+  Slide,
 } from '@mui/material';
 import {
   Timer as TimerIcon,
@@ -16,12 +24,38 @@ import {
   Pause as PauseIcon,
   Refresh as RefreshIcon,
   Psychology as PsychologyIcon,
+  EmojiEvents as TrophyIcon,
+  LocalFireDepartment as FireIcon,
+  Star as StarIcon,
+  LightningBolt as EnergyIcon,
+  WorkspacePremium as PremiumIcon,
+  Celebrate as CelebrateIcon,
 } from '@mui/icons-material';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface PomodoroTimerProps {
   taskTitle: string;
   learningStyle: string;
   studyTips: string[];
+}
+
+interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  icon: React.ReactNode;
+  unlocked: boolean;
+  progress: number;
+  maxProgress: number;
+}
+
+interface PomodoroStats {
+  totalSessions: number;
+  totalMinutes: number;
+  currentStreak: number;
+  longestStreak: number;
+  weeklyGoal: number;
+  weeklyProgress: number;
 }
 
 const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
@@ -30,11 +64,25 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
   studyTips
 }) => {
   const theme = useTheme();
-  const [timeLeft, setTimeLeft] = useState(25 * 60); // 25 minutes in seconds
+  const [timeLeft, setTimeLeft] = useState(25 * 60);
   const [isRunning, setIsRunning] = useState(false);
   const [sessionType, setSessionType] = useState<'focus' | 'break'>('focus');
   const [streak, setStreak] = useState(0);
   const [showTip, setShowTip] = useState(false);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [energyLevel, setEnergyLevel] = useState(100);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [stats, setStats] = useState<PomodoroStats>({
+    totalSessions: 0,
+    totalMinutes: 0,
+    currentStreak: 0,
+    longestStreak: 0,
+    weeklyGoal: 20,
+    weeklyProgress: 0
+  });
+  const [level, setLevel] = useState(1);
+  const [experience, setExperience] = useState(0);
+  const [showLevelUp, setShowLevelUp] = useState(false);
 
   const focusTime = 25 * 60; // 25 minutes
   const shortBreak = 5 * 60; // 5 minutes
@@ -46,6 +94,10 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
     if (isRunning && timeLeft > 0) {
       interval = setInterval(() => {
         setTimeLeft(timeLeft - 1);
+        // Energy decreases slowly during focus sessions
+        if (sessionType === 'focus' && timeLeft % 60 === 0) {
+          setEnergyLevel(prev => Math.max(0, prev - 2));
+        }
       }, 1000);
     } else if (timeLeft === 0) {
       handleSessionComplete();
@@ -56,25 +108,166 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
     };
   }, [isRunning, timeLeft]);
 
+  // Load stats and achievements from localStorage
+  useEffect(() => {
+    const savedStats = localStorage.getItem('pomodoroStats');
+    const savedAchievements = localStorage.getItem('pomodoroAchievements');
+    const savedLevel = localStorage.getItem('pomodoroLevel');
+    const savedExp = localStorage.getItem('pomodoroExp');
+    
+    if (savedStats) setStats(JSON.parse(savedStats));
+    if (savedAchievements) setAchievements(JSON.parse(savedAchievements));
+    if (savedLevel) setLevel(parseInt(savedLevel));
+    if (savedExp) setExperience(parseInt(savedExp));
+  }, []);
+
+  // Initialize default achievements
+  useEffect(() => {
+    if (achievements.length === 0) {
+      const defaultAchievements: Achievement[] = [
+        {
+          id: 'first_session',
+          name: 'First Focus',
+          description: 'Complete your first focus session',
+          icon: <StarIcon />,
+          unlocked: false,
+          progress: 0,
+          maxProgress: 1
+        },
+        {
+          id: 'streak_warrior',
+          name: 'Streak Warrior',
+          description: 'Complete 5 sessions in a row',
+          icon: <FireIcon />,
+          unlocked: false,
+          progress: 0,
+          maxProgress: 5
+        },
+        {
+          id: 'focus_master',
+          name: 'Focus Master',
+          description: 'Complete 50 total sessions',
+          icon: <TrophyIcon />,
+          unlocked: false,
+          progress: 0,
+          maxProgress: 50
+        },
+        {
+          id: 'energy_champion',
+          name: 'Energy Champion',
+          description: 'Maintain high energy for 10 sessions',
+          icon: <EnergyIcon />,
+          unlocked: false,
+          progress: 0,
+          maxProgress: 10
+        }
+      ];
+      setAchievements(defaultAchievements);
+    }
+  }, []);
+
   const handleSessionComplete = () => {
     setIsRunning(false);
     
     if (sessionType === 'focus') {
       const newStreak = streak + 1;
+      const experienceGained = 25 + (newStreak > 3 ? 10 : 0); // Bonus XP for streaks
+      const newExperience = experience + experienceGained;
+      const newLevel = Math.floor(newExperience / 100) + 1;
+      
       setStreak(newStreak);
+      setExperience(newExperience);
+      
+      // Check for level up
+      if (newLevel > level) {
+        setLevel(newLevel);
+        setShowLevelUp(true);
+        setTimeout(() => setShowLevelUp(false), 3000);
+      }
+      
+      // Update stats
+      const newStats = {
+        ...stats,
+        totalSessions: stats.totalSessions + 1,
+        totalMinutes: stats.totalMinutes + 25,
+        currentStreak: newStreak,
+        longestStreak: Math.max(stats.longestStreak, newStreak),
+        weeklyProgress: stats.weeklyProgress + 1
+      };
+      setStats(newStats);
+      localStorage.setItem('pomodoroStats', JSON.stringify(newStats));
+      localStorage.setItem('pomodoroExp', newExperience.toString());
+      localStorage.setItem('pomodoroLevel', newLevel.toString());
+      
+      // Check achievements
+      checkAndUnlockAchievements(newStats, newStreak);
       
       // Determine break length
       if (newStreak % 4 === 0) {
         setSessionType('break');
         setTimeLeft(longBreak);
+        // Restore energy on long break
+        setEnergyLevel(prev => Math.min(100, prev + 30));
       } else {
         setSessionType('break');
         setTimeLeft(shortBreak);
+        // Small energy restore on short break
+        setEnergyLevel(prev => Math.min(100, prev + 10));
+      }
+      
+      // Show celebration for milestones
+      if (newStreak % 4 === 0 || newStreak === 1) {
+        setShowCelebration(true);
+        setTimeout(() => setShowCelebration(false), 2000);
       }
     } else {
       setSessionType('focus');
       setTimeLeft(focusTime);
+      // Energy boost after break
+      setEnergyLevel(prev => Math.min(100, prev + 20));
     }
+  };
+  
+  const checkAndUnlockAchievements = (newStats: PomodoroStats, currentStreak: number) => {
+    const updatedAchievements = achievements.map(achievement => {
+      if (achievement.unlocked) return achievement;
+      
+      let newProgress = achievement.progress;
+      let shouldUnlock = false;
+      
+      switch (achievement.id) {
+        case 'first_session':
+          newProgress = Math.min(achievement.maxProgress, newStats.totalSessions);
+          shouldUnlock = newStats.totalSessions >= 1;
+          break;
+        case 'streak_warrior':
+          newProgress = Math.min(achievement.maxProgress, currentStreak);
+          shouldUnlock = currentStreak >= 5;
+          break;
+        case 'focus_master':
+          newProgress = Math.min(achievement.maxProgress, newStats.totalSessions);
+          shouldUnlock = newStats.totalSessions >= 50;
+          break;
+        case 'energy_champion':
+          newProgress = Math.min(achievement.maxProgress, newStats.totalSessions);
+          shouldUnlock = newStats.totalSessions >= 10 && energyLevel > 70;
+          break;
+      }
+      
+      if (shouldUnlock && !achievement.unlocked) {
+        setShowCelebration(true);
+        setTimeout(() => setShowCelebration(false), 2000);
+      }
+      
+      return {
+        ...achievement,
+        progress: newProgress,
+        unlocked: shouldUnlock
+      };
+    });
+    
+    setAchievements(updatedAchievements);
+    localStorage.setItem('pomodoroAchievements', JSON.stringify(updatedAchievements));
   };
 
   const toggleTimer = () => {
@@ -117,77 +310,250 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
   };
 
   return (
-    <Card sx={{ mb: 2, border: `2px solid ${getSessionColor()}20` }}>
-      <CardContent>
-        {/* Header */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <TimerIcon sx={{ color: getSessionColor() }} />
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              {sessionType === 'focus' ? 'Focus Time' : 'Break Time'}
-            </Typography>
-            <Chip
-              label={`${streak} 🔥`}
-              size="small"
-              color="primary"
-              variant={streak > 0 ? 'filled' : 'outlined'}
-            />
-          </Box>
-          
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Tooltip title="Reset">
-              <IconButton onClick={resetTimer} size="small">
-                <RefreshIcon />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Box>
-
-        {/* Task Info */}
-        <Typography variant="body1" sx={{ mb: 2, fontWeight: 500 }}>
-          {taskTitle}
-        </Typography>
-
-        {/* Timer Display */}
-        <Box sx={{ 
-          textAlign: 'center', 
-          mb: 3,
-          py: 3,
-          bgcolor: `${getSessionColor()}10`,
-          borderRadius: 2,
-          border: `2px solid ${getSessionColor()}30`
-        }}>
-          <Typography 
-            variant="h2" 
-            sx={{ 
-              fontWeight: 700, 
-              color: getSessionColor(),
-              fontFamily: 'monospace'
+    <>
+      {/* Level Up Animation */}
+      <AnimatePresence>
+        {showLevelUp && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.5, y: 50 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.5, y: -50 }}
+            transition={{ type: "spring", duration: 0.5 }}
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 9999
             }}
           >
-            {formatTime(timeLeft)}
-          </Typography>
-          
-          {/* Progress Bar */}
-          <Box sx={{ 
-            width: '80%', 
-            mx: 'auto', 
-            mt: 2,
-            height: 8,
-            bgcolor: 'grey.200',
-            borderRadius: 4,
-            overflow: 'hidden'
-          }}>
-            <Box
-              sx={{
-                width: `${getProgress()}%`,
-                height: '100%',
-                bgcolor: getSessionColor(),
-                transition: 'width 1s linear'
-              }}
-            />
+            <Card sx={{ p: 3, textAlign: 'center', background: 'linear-gradient(135deg, #FFD700, #FFA500)' }}>
+              <CelebrateIcon sx={{ fontSize: 48, color: 'white', mb: 1 }} />
+              <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold' }}>
+                Level Up! {level}
+              </Typography>
+              <Typography variant="body1" sx={{ color: 'white' }}>
+                You've reached level {level}!
+              </Typography>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {/* Celebration Animation */}
+      <AnimatePresence>
+        {showCelebration && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0 }}
+            transition={{ type: "spring", duration: 0.5 }}
+            style={{
+              position: 'fixed',
+              top: '20px',
+              right: '20px',
+              zIndex: 9998
+            }}
+          >
+            <Card sx={{ p: 2, bgcolor: 'success.light' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <TrophyIcon color="success" />
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  {streak === 1 ? 'First session complete!' : `${streak} session streak!`}
+                </Typography>
+              </Box>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <Card sx={{ mb: 2, border: `2px solid ${getSessionColor()}20`, position: 'relative', overflow: 'visible' }}>
+          {/* Energy Bar */}
+          <Box sx={{ position: 'absolute', top: -10, left: 20, right: 20, zIndex: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <EnergyIcon sx={{ fontSize: 16, color: energyLevel > 50 ? 'success.main' : 'warning.main' }} />
+              <LinearProgress
+                variant="determinate"
+                value={energyLevel}
+                sx={{
+                  flex: 1,
+                  height: 6,
+                  borderRadius: 3,
+                  bgcolor: 'grey.200',
+                  '& .MuiLinearProgress-bar': {
+                    bgcolor: energyLevel > 50 ? 'success.main' : 'warning.main',
+                    borderRadius: 3
+                  }
+                }}
+              />
+              <Typography variant="caption" sx={{ fontWeight: 'bold', minWidth: 30 }}>
+                {energyLevel}%
+              </Typography>
+            </Box>
           </Box>
-        </Box>
+          <CardContent>
+            <Box sx={{ mt: 2 }}>
+              {/* Header with Level and XP */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <TimerIcon sx={{ color: getSessionColor() }} />
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    {sessionType === 'focus' ? 'Focus Time' : 'Break Time'}
+                  </Typography>
+                  <Chip
+                    label={`${streak} 🔥`}
+                    size="small"
+                    color="primary"
+                    variant={streak > 0 ? 'filled' : 'outlined'}
+                  />
+                </Box>
+                
+                {/* Level Display */}
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Chip
+                    avatar={
+                      <Avatar sx={{ bgcolor: 'primary.main', width: 24, height: 24 }}>
+                        <PremiumIcon sx={{ fontSize: 16, color: 'white' }} />
+                      </Avatar>
+                    }
+                    label={`Lvl ${level}`}
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                  />
+                </motion.div>
+              </Box>
+              
+              {/* XP Progress Bar */}
+              <Box sx={{ mb: 2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="caption" color="textSecondary">
+                    Experience Points
+                  </Typography>
+                  <Typography variant="caption" color="textSecondary">
+                    {experience % 100}/100 XP
+                  </Typography>
+                </Box>
+                <LinearProgress
+                  variant="determinate"
+                  value={experience % 100}
+                  sx={{
+                    height: 4,
+                    borderRadius: 2,
+                    bgcolor: 'grey.200',
+                    '& .MuiLinearProgress-bar': {
+                      background: 'linear-gradient(90deg, #4CAF50, #8BC34A)',
+                      borderRadius: 2
+                    }
+                  }}
+                />
+              </Box>
+
+              {/* Task Info */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+              >
+                <Typography variant="body1" sx={{ mb: 2, fontWeight: 500 }}>
+                  {taskTitle}
+                </Typography>
+              </motion.div>
+
+              {/* Timer Display with Enhanced Animation */}
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", duration: 0.5 }}
+              >
+                <Box sx={{ 
+                  textAlign: 'center', 
+                  mb: 3,
+                  py: 3,
+                  bgcolor: `${getSessionColor()}10`,
+                  borderRadius: 2,
+                  border: `2px solid ${getSessionColor()}30`,
+                  position: 'relative'
+                }}>
+                  {/* Animated Ring Effect */}
+                  {isRunning && (
+                    <motion.div
+                      style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        width: '120%',
+                        height: '120%',
+                        border: `2px solid ${getSessionColor()}30`,
+                        borderRadius: '16px'
+                      }}
+                      animate={{
+                        scale: [1, 1.1, 1],
+                        opacity: [0.5, 0, 0.5]
+                      }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                      }}
+                    />
+                  )}
+                  
+                  <motion.div
+                    animate={{
+                      scale: isRunning ? [1, 1.02, 1] : 1,
+                    }}
+                    transition={{
+                      duration: 1,
+                      repeat: isRunning ? Infinity : 0,
+                      ease: "easeInOut"
+                    }}
+                  >
+                    <Typography 
+                      variant="h2" 
+                      sx={{ 
+                        fontWeight: 700, 
+                        color: getSessionColor(),
+                        fontFamily: 'monospace',
+                        textShadow: isRunning ? `0 0 20px ${getSessionColor()}40` : 'none'
+                      }}
+                    >
+                      {formatTime(timeLeft)}
+                    </Typography>
+                  </motion.div>
+                  
+                  {/* Progress Bar */}
+                  <Box sx={{ 
+                    width: '80%', 
+                    mx: 'auto', 
+                    mt: 2,
+                    height: 8,
+                    bgcolor: 'grey.200',
+                    borderRadius: 4,
+                    overflow: 'hidden'
+                  }}>
+                    <motion.div
+                      style={{
+                        height: '100%',
+                        background: `linear-gradient(90deg, ${getSessionColor()}, ${getSessionColor()}80)`,
+                        borderRadius: 4
+                      }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${getProgress()}%` }}
+                      transition={{ duration: 0.5, ease: "easeOut" }}
+                    />
+                  </Box>
+                </Box>
+              </motion.div>
 
         {/* Learning Style Tip */}
         <Box sx={{ 
@@ -222,69 +588,155 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
           </Box>
         )}
 
-        {/* Control Buttons */}
-        <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
-          <Button
-            variant="contained"
-            startIcon={isRunning ? <PauseIcon /> : <PlayIcon />}
-            onClick={toggleTimer}
-            sx={{
-              bgcolor: getSessionColor(),
-              '&:hover': { bgcolor: getSessionColor() }
-            }}
-          >
-            {isRunning ? 'Pause' : 'Start'}
-          </Button>
-          
-          {sessionType === 'focus' && (
-            <Button
-              variant="outlined"
-              onClick={() => {
-                setTimeLeft(0);
-                handleSessionComplete();
-              }}
-            >
-              Skip to Break
-            </Button>
-          )}
-        </Box>
+              {/* Enhanced Control Buttons */}
+              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', mb: 3 }}>
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Button
+                    variant="contained"
+                    startIcon={isRunning ? <PauseIcon /> : <PlayIcon />}
+                    onClick={toggleTimer}
+                    sx={{
+                      bgcolor: getSessionColor(),
+                      '&:hover': { bgcolor: getSessionColor() },
+                      minWidth: '140px',
+                      py: 1.5
+                    }}
+                  >
+                    {isRunning ? 'Pause' : 'Start'}
+                  </Button>
+                </motion.div>
+                
+                {sessionType === 'focus' && (
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <Button
+                      variant="outlined"
+                      onClick={() => {
+                        setTimeLeft(0);
+                        handleSessionComplete();
+                      }}
+                      sx={{ py: 1.5 }}
+                    >
+                      Skip to Break
+                    </Button>
+                  </motion.div>
+                )}
+                
+                <Tooltip title="Reset Timer">
+                  <motion.div
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                  >
+                    <IconButton onClick={resetTimer} size="small">
+                      <RefreshIcon />
+                    </IconButton>
+                  </motion.div>
+                </Tooltip>
+              </Box>
 
-        {/* Session Stats */}
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-around', 
-          mt: 3,
-          pt: 2,
-          borderTop: '1px solid #eee'
-        }}>
-          <Box sx={{ textAlign: 'center' }}>
-            <Typography variant="h6" color="primary">
-              {streak}
-            </Typography>
-            <Typography variant="caption" color="textSecondary">
-              Sessions Today
-            </Typography>
-          </Box>
-          <Box sx={{ textAlign: 'center' }}>
-            <Typography variant="h6" color="success.main">
-              {Math.round((streak * focusTime) / 60)}
-            </Typography>
-            <Typography variant="caption" color="textSecondary">
-              Focus Minutes
-            </Typography>
-          </Box>
-          <Box sx={{ textAlign: 'center' }}>
-            <Typography variant="h6" color="info.main">
-              {streak > 0 ? Math.round((streak * (focusTime + shortBreak)) / 60) : 0}
-            </Typography>
-            <Typography variant="caption" color="textSecondary">
-              Total Minutes
-            </Typography>
-          </Box>
-        </Box>
-      </CardContent>
-    </Card>
-  );
+              {/* Enhanced Session Stats */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+              >
+                <Box sx={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-around', 
+                  mt: 3,
+                  pt: 2,
+                  borderTop: '1px solid #eee'
+                }}>
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    style={{ textAlign: 'center' }}
+                  >
+                    <Typography variant="h6" color="primary">
+                      {streak}
+                    </Typography>
+                    <Typography variant="caption" color="textSecondary">
+                      Sessions Today
+                    </Typography>
+                  </motion.div>
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    style={{ textAlign: 'center' }}
+                  >
+                    <Typography variant="h6" color="success.main">
+                      {Math.round((streak * focusTime) / 60)}
+                    </Typography>
+                    <Typography variant="caption" color="textSecondary">
+                      Focus Minutes
+                    </Typography>
+                  </motion.div>
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    style={{ textAlign: 'center' }}
+                  >
+                    <Typography variant="h6" color="info.main">
+                      {streak > 0 ? Math.round((streak * (focusTime + shortBreak)) / 60) : 0}
+                    </Typography>
+                    <Typography variant="caption" color="textSecondary">
+                      Total Minutes
+                    </Typography>
+                  </motion.div>
+                </Box>
+              </motion.div>
+              
+              {/* Achievements Section */}
+              {achievements.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.6 }}
+                >
+                  <Box sx={{ mt: 3, pt: 2, borderTop: '1px solid #eee' }}>
+                    <Typography variant="subtitle2" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <TrophyIcon color="primary" />
+                      Achievements
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                      {achievements.slice(0, 4).map((achievement) => (
+                        <motion.div
+                          key={achievement.id}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                        >
+                          <Chip
+                            avatar={
+                              <Avatar sx={{ 
+                                width: 20, 
+                                height: 20, 
+                                bgcolor: achievement.unlocked ? 'primary.main' : 'grey.300' 
+                              }}>
+                                {achievement.icon}
+                              </Avatar>
+                            }
+                            label={achievement.name}
+                            size="small"
+                            color={achievement.unlocked ? 'primary' : 'default'}
+                            variant={achievement.unlocked ? 'filled' : 'outlined'}
+                            sx={{
+                              opacity: achievement.unlocked ? 1 : 0.6,
+                              fontSize: '0.7rem'
+                            }}
+                          />
+                        </motion.div>
+                      ))}
+                    </Box>
+                  </Box>
+                </motion.div>
+              )}
+            </Box>
+          </CardContent>
+        </Card>
+      </motion.div>
+    </>
 };
 
 export default PomodoroTimer;

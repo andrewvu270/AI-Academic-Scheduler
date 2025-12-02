@@ -9,17 +9,24 @@ import {
   LinearProgress,
   Alert,
   CircularProgress,
+  Fab,
 } from '@mui/material';
 import {
   CloudUpload as CloudUploadIcon,
   TaskAlt as CompletedIcon,
   HourglassEmpty as PendingIcon,
   AccessTime as DueSoonIcon,
+  Dashboard as DashboardIcon,
+  Analytics as AnalyticsIcon,
+  Timer as TimerIcon,
 } from '@mui/icons-material';
+import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from '../config/api';
 import NaturalLanguageQuery from '../components/NaturalLanguageQuery';
 import StressVisualization from '../components/StressVisualization';
 import LearningStyleProfile from '../components/LearningStyleProfile';
+import PomodoroTimer from '../components/PomodoroTimer';
+import AnalyticsDashboard from '../components/AnalyticsDashboard';
 
 interface StoredTask {
   id: string;
@@ -96,11 +103,13 @@ const fetchSupabaseTasks = async (): Promise<StoredTask[] | null> => {
   }
 };
 
-const Dashboard: React.FC = () => {
+const Dashboard = () => {
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [statsSnapshot, setStatsSnapshot] = useState(() => computeStats(getLocalTasks()));
+  const [activeView, setActiveView] = useState<'overview' | 'analytics' | 'focus'>('overview');
+  const [showFab, setShowFab] = useState(false);
 
   const refreshStats = useCallback(async () => {
     const token = localStorage.getItem('access_token');
@@ -118,6 +127,8 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     refreshStats();
+    // Show FAB after a delay
+    setTimeout(() => setShowFab(true), 1000);
   }, [refreshStats]);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -241,161 +252,403 @@ const Dashboard: React.FC = () => {
   };
 
   const stats = [
-    { label: 'Completed', value: statsSnapshot.completed, icon: CompletedIcon, color: '#388e3c' },
-    { label: 'Pending', value: statsSnapshot.pending, icon: PendingIcon, color: '#f57c00' },
-    { label: 'Due Soon', value: statsSnapshot.dueSoon, icon: DueSoonIcon, color: '#d32f2f' },
+    { 
+      label: 'Completed', 
+      value: statsSnapshot.completed, 
+      icon: CompletedIcon, 
+      color: '#388e3c',
+      bgGradient: 'linear-gradient(135deg, #4caf50, #66bb6a)'
+    },
+    { 
+      label: 'Pending', 
+      value: statsSnapshot.pending, 
+      icon: PendingIcon, 
+      color: '#f57c00',
+      bgGradient: 'linear-gradient(135deg, #ff9800, #ffb74d)'
+    },
+    { 
+      label: 'Due Soon', 
+      value: statsSnapshot.dueSoon, 
+      icon: DueSoonIcon, 
+      color: '#d32f2f',
+      bgGradient: 'linear-gradient(135deg, #f44336, #ef5350)'
+    },
   ];
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Header */}
-      <Box sx={{ mb: 6 }} className="animate-fade-in">
-        <Typography variant="h2" component="h1" sx={{ mb: 1 }}>
-          Welcome Back
-        </Typography>
-        <Typography variant="body1" color="textSecondary" sx={{ fontSize: '1.1rem' }}>
-          Here's what's happening with your academic schedule.
-        </Typography>
-      </Box>
-
-      {/* Stats Grid */}
-      <Box className="bento-grid animate-fade-in delay-100" sx={{ mb: 6, padding: 0 }}>
-        {stats.map((stat, index) => {
-          const Icon = stat.icon;
-          return (
-            <Paper
-              key={index}
-              className="bento-card"
+    <>
+      {/* Floating Action Button for Quick Actions */}
+      <AnimatePresence>
+        {showFab && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0 }}
+            transition={{ type: "spring", duration: 0.5 }}
+            style={{
+              position: 'fixed',
+              bottom: 24,
+              right: 24,
+              zIndex: 1000
+            }}
+          >
+            <Fab
+              color="primary"
+              aria-label="quick-actions"
               sx={{
-                gridColumn: { xs: 'span 12', sm: 'span 4' },
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'space-between',
-                minHeight: '160px'
+                background: 'linear-gradient(135deg, #1976d2, #42a5f5)',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #1565c0, #2196f3)',
+                }
               }}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <Box sx={{
-                  p: 1,
-                  borderRadius: '12px',
-                  bgcolor: `${stat.color}15`,
-                  color: stat.color,
-                  mr: 2
-                }}>
-                  <Icon sx={{ fontSize: 24 }} />
-                </Box>
-                <Typography color="textSecondary" variant="body2" fontWeight={500}>
-                  {stat.label}
+              <DashboardIcon />
+            </Fab>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        {/* Enhanced Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <Box sx={{ mb: 6 }} className="animate-fade-in">
+            <Typography variant="h2" component="h1" sx={{ mb: 1, fontWeight: 700 }}>
+              Welcome to MyDesk
+            </Typography>
+            <Typography variant="body1" color="textSecondary" sx={{ fontSize: '1.1rem' }}>
+              Your intelligent productivity companion for work and learning
+            </Typography>
+            
+            {/* View Switcher */}
+            <Box sx={{ display: 'flex', gap: 2, mt: 3 }}>
+              {[
+                { id: 'overview', label: 'Overview', icon: <DashboardIcon /> },
+                { id: 'analytics', label: 'Analytics', icon: <AnalyticsIcon /> },
+                { id: 'focus', label: 'Focus Mode', icon: <TimerIcon /> },
+              ].map((view) => (
+                <motion.div
+                  key={view.id}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Button
+                    variant={activeView === view.id ? 'contained' : 'outlined'}
+                    startIcon={view.icon}
+                    onClick={() => setActiveView(view.id as any)}
+                    sx={{
+                      borderRadius: '20px',
+                      px: 3,
+                      py: 1,
+                    }}
+                  >
+                    {view.label}
+                  </Button>
+                </motion.div>
+              ))}
+            </Box>
+          </Box>
+        </motion.div>
+
+        {/* Animated Stats Grid */}
+        <AnimatePresence mode="wait">
+          {activeView === 'overview' && (
+            <motion.div
+              key="overview"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Box className="bento-grid animate-fade-in delay-100" sx={{ mb: 6, padding: 0 }}>
+                {stats.map((stat, index) => {
+                  const Icon = stat.icon;
+                  return (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.1 + index * 0.1, type: "spring" }}
+                      whileHover={{ scale: 1.02, y: -5 }}
+                    >
+                      <Paper
+                        className="bento-card"
+                        sx={{
+                          gridColumn: { xs: 'span 12', sm: 'span 4' },
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          minHeight: '160px',
+                          background: stat.bgGradient,
+                          color: 'white',
+                          position: 'relative',
+                          overflow: 'hidden',
+                          '&::before': {
+                            content: '""',
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            background: 'rgba(255, 255, 255, 0.1)',
+                            backdropFilter: 'blur(10px)',
+                          }
+                        }}
+                      >
+                        <Box sx={{ position: 'relative', zIndex: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                            <Box sx={{
+                              p: 1,
+                              borderRadius: '12px',
+                              bgcolor: 'rgba(255, 255, 255, 0.2)',
+                              color: 'white',
+                              mr: 2
+                            }}>
+                              <Icon sx={{ fontSize: 24 }} />
+                            </Box>
+                            <Typography color="rgba(255, 255, 255, 0.9)" variant="body2" fontWeight={500}>
+                              {stat.label}
+                            </Typography>
+                          </Box>
+                          <motion.div
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ delay: 0.2 + index * 0.1, type: "spring" }}
+                          >
+                            <Typography variant="h3" sx={{ fontWeight: 700, color: 'white' }}>
+                              {stat.value}
+                            </Typography>
+                          </motion.div>
+                        </Box>
+                      </Paper>
+                    </motion.div>
+                  );
+                })}
+              </Box>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Content Based on Active View */}
+        <AnimatePresence mode="wait">
+          {activeView === 'overview' && (
+            <motion.div
+              key="overview-content"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              {/* AI Assistant */}
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 }}
+              >
+                <NaturalLanguageQuery />
+              </motion.div>
+
+              {/* Learning Style Profile */}
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 }}
+              >
+                <LearningStyleProfile />
+              </motion.div>
+
+              {/* Stress Visualization */}
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.4 }}
+              >
+                <StressVisualization />
+              </motion.div>
+
+              {/* Enhanced Upload Section */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+              >
+                <Paper
+                  className="bento-card animate-fade-in delay-200"
+                  sx={{
+                    p: 6,
+                    mb: 6,
+                    textAlign: 'center',
+                    border: '2px dashed #e0e0e0',
+                    bgcolor: 'transparent',
+                    background: 'linear-gradient(135deg, rgba(25, 118, 210, 0.02), rgba(66, 165, 245, 0.05))',
+                    '&:hover': {
+                      borderColor: 'primary.main',
+                      bgcolor: 'rgba(25, 118, 210, 0.05)',
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.1)'
+                    },
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  <motion.div
+                    animate={{ y: [0, -10, 0] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  >
+                    <CloudUploadIcon sx={{ fontSize: 48, mb: 2, color: 'primary.main' }} />
+                  </motion.div>
+                  <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>
+                    Upload to MyDesk
+                  </Typography>
+                  <Typography variant="body1" sx={{ mb: 4, maxWidth: '500px', mx: 'auto' }}>
+                    Drop your PDF syllabus or documents here to automatically extract deadlines and create your intelligent study plan.
+                  </Typography>
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <Button
+                      variant="contained"
+                      component="label"
+                      size="large"
+                      disabled={uploading}
+                      sx={{ 
+                        minWidth: '200px',
+                        py: 1.5,
+                        background: 'linear-gradient(135deg, #1976d2, #42a5f5)',
+                        '&:hover': {
+                          background: 'linear-gradient(135deg, #1565c0, #2196f3)',
+                        }
+                      }}
+                    >
+                      {uploading ? <CircularProgress size={24} color="inherit" /> : 'Select PDF'}
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf"
+                        hidden
+                        onChange={handleFileUpload}
+                        disabled={uploading}
+                      />
+                    </Button>
+                  </motion.div>
+                </Paper>
+              </motion.div>
+
+              {/* Uploaded Files */}
+              {uploadedFiles.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6 }}
+                  className="animate-fade-in delay-300"
+                >
+                  <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
+                    Recent Uploads
+                  </Typography>
+                  <Grid container spacing={3}>
+                    {uploadedFiles.map((file, index) => (
+                      <Grid item xs={12} sm={6} md={4} key={index}>
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 0.1 + index * 0.1 }}
+                          whileHover={{ scale: 1.02, y: -5 }}
+                        >
+                          <Paper className="bento-card" sx={{ p: 3 }}>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                              {file}
+                            </Typography>
+                            <LinearProgress
+                              variant="determinate"
+                              value={100}
+                              sx={{
+                                mb: 2,
+                                height: 6,
+                                borderRadius: 3,
+                                bgcolor: '#f0f0f0',
+                                '& .MuiLinearProgress-bar': {
+                                  borderRadius: 3,
+                                  background: 'linear-gradient(90deg, #4caf50, #66bb6a)'
+                                }
+                              }}
+                            />
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="caption" color="textSecondary">
+                                Processed
+                              </Typography>
+                              <Button size="small" color="primary">
+                                View
+                              </Button>
+                            </Box>
+                          </Paper>
+                        </motion.div>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </motion.div>
+              )}
+            </motion.div>
+          )}
+
+          {activeView === 'analytics' && (
+            <motion.div
+              key="analytics-content"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.3 }}
+            >
+              <AnalyticsDashboard />
+            </motion.div>
+          )}
+
+          {activeView === 'focus' && (
+            <motion.div
+              key="focus-content"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Box sx={{ mb: 4 }}>
+                <Typography variant="h5" sx={{ mb: 2, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <TimerIcon color="primary" />
+                  Focus Mode
+                </Typography>
+                <Typography variant="body1" color="textSecondary">
+                  Boost your productivity with gamified focus sessions and achievement tracking
                 </Typography>
               </Box>
-              <Typography variant="h3" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                {stat.value}
-              </Typography>
-            </Paper>
-          );
-        })}
-      </Box>
+              <PomodoroTimer 
+                taskTitle="Focus Session" 
+                learningStyle="visual" 
+                studyTips={["Take regular breaks", "Stay hydrated", "Minimize distractions"]}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      {/* AI Assistant */}
-      <NaturalLanguageQuery />
+        {/* Upload Message */}
+        <AnimatePresence>
+          {uploadMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Alert severity={uploadMessage.type} sx={{ mb: 4, borderRadius: '16px' }}>
+                {uploadMessage.text}
+              </Alert>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      {/* Learning Style Profile */}
-      <LearningStyleProfile />
-
-      {/* Stress Visualization */}
-      <StressVisualization />
-
-      {/* Upload Section */}
-      <Paper
-        className="bento-card animate-fade-in delay-200"
-        sx={{
-          p: 6,
-          mb: 6,
-          textAlign: 'center',
-          border: '2px dashed #e0e0e0',
-          bgcolor: 'transparent',
-          '&:hover': {
-            borderColor: 'primary.main',
-            bgcolor: 'rgba(0,0,0,0.02)'
-          }
-        }}
-      >
-        <CloudUploadIcon sx={{ fontSize: 48, mb: 2, color: 'text.secondary' }} />
-        <Typography variant="h4" sx={{ mb: 2 }}>
-          Upload Syllabus
-        </Typography>
-        <Typography variant="body1" sx={{ mb: 4, maxWidth: '500px', mx: 'auto' }}>
-          Drop your PDF syllabus here to automatically extract deadlines and create your study plan.
-        </Typography>
-        <Button
-          variant="contained"
-          component="label"
-          size="large"
-          disabled={uploading}
-          sx={{ minWidth: '200px' }}
-        >
-          {uploading ? <CircularProgress size={24} color="inherit" /> : 'Select PDF'}
-          <input
-            type="file"
-            multiple
-            accept=".pdf"
-            hidden
-            onChange={handleFileUpload}
-            disabled={uploading}
-          />
-        </Button>
-      </Paper>
-
-      {/* Upload Message */}
-      {uploadMessage && (
-        <Alert severity={uploadMessage.type} sx={{ mb: 4, borderRadius: '16px' }}>
-          {uploadMessage.text}
-        </Alert>
-      )}
-
-      {/* Uploaded Files */}
-      {uploadedFiles.length > 0 && (
-        <Box className="animate-fade-in delay-300">
-          <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
-            Recent Uploads
-          </Typography>
-          <Grid container spacing={3}>
-            {uploadedFiles.map((file, index) => (
-              <Grid item xs={12} sm={6} md={4} key={index}>
-                <Paper className="bento-card" sx={{ p: 3 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
-                    {file}
-                  </Typography>
-                  <LinearProgress
-                    variant="determinate"
-                    value={100}
-                    sx={{
-                      mb: 2,
-                      height: 6,
-                      borderRadius: 3,
-                      bgcolor: '#f0f0f0',
-                      '& .MuiLinearProgress-bar': {
-                        borderRadius: 3,
-                        bgcolor: 'success.main'
-                      }
-                    }}
-                  />
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="caption" color="textSecondary">
-                      Processed
-                    </Typography>
-                    <Button size="small" color="primary">
-                      View
-                    </Button>
-                  </Box>
-                </Paper>
-              </Grid>
-            ))}
-          </Grid>
-        </Box>
-      )}
-
-    </Container>
+      </Container>
+    </>
   );
 };
 

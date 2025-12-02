@@ -32,16 +32,8 @@ function App() {
           path="/dashboard"
           element={
             <ProtectedRoute>
-              <>
-                <Navigation />
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/tasks" element={<Tasks />} />
-                  <Route path="/schedule" element={<Schedule />} />
-                  <Route path="/study-plan" element={<StudyPlan />} />
-                  <Route path="/survey" element={<Survey />} />
-                </Routes>
-              </>
+              <Navigation />
+              <Dashboard />
             </ProtectedRoute>
           }
         />
@@ -49,10 +41,8 @@ function App() {
           path="/tasks"
           element={
             <ProtectedRoute>
-              <>
-                <Navigation />
-                <Tasks />
-              </>
+              <Navigation />
+              <Tasks />
             </ProtectedRoute>
           }
         />
@@ -60,14 +50,29 @@ function App() {
           path="/schedule"
           element={
             <ProtectedRoute>
-              <>
-                <Navigation />
-                <Schedule />
-              </>
+              <Navigation />
+              <Schedule />
             </ProtectedRoute>
           }
         />
-        <Route path="/survey" element={<Survey />} />
+        <Route
+          path="/study-plan"
+          element={
+            <ProtectedRoute>
+              <Navigation />
+              <StudyPlan />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/survey"
+          element={
+            <ProtectedRoute>
+              <Navigation />
+              <Survey />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </BrowserRouter>
   );

@@ -41,6 +41,8 @@ interface StudySession {
   priority: number;
   research_tips?: string[];
   estimated_hours: number;
+  completed?: boolean;
+  actual_hours?: number;
 }
 
 interface StudyPlan {
@@ -63,6 +65,7 @@ const StudyPlan: React.FC = () => {
   const [daysToPlan, setDaysToPlan] = useState(7);
   const [selectedSession, setSelectedSession] = useState<StudySession | null>(null);
   const [userLearningStyle, setUserLearningStyle] = useState<string>('visual');
+  const [completedSessions, setCompletedSessions] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchTasks();
@@ -91,7 +94,12 @@ const StudyPlan: React.FC = () => {
     try {
       const fetchedTasks = await fetchAllTasks();
       const taskArray = Array.isArray(fetchedTasks) ? fetchedTasks : [];
-      setTasks(taskArray.filter((t: Task) => t.status !== 'completed'));
+      // Only include tasks that are not completed (pending and overdue)
+      const incompleteTasks = taskArray.filter((t: Task) => 
+        t.status === 'pending' || t.status === 'overdue'
+      );
+      setTasks(incompleteTasks);
+      console.log(`Fetched ${incompleteTasks.length} incomplete tasks out of ${taskArray.length} total tasks`);
     } catch (err) {
       setError('Failed to fetch tasks');
     } finally {
@@ -193,9 +201,52 @@ const StudyPlan: React.FC = () => {
   };
 
   const calculateStressLevel = (sessions: StudySession[]): 'low' | 'medium' | 'high' => {
-    const avgHoursPerDay = sessions.length / daysToPlan;
-    if (avgHoursPerDay > 6) return 'high';
-    if (avgHoursPerDay > 4) return 'medium';
+    if (sessions.length === 0) return 'low';
+    
+    // More sophisticated stress calculation
+    const dailySessions: { [key: string]: StudySession[] } = {};
+    sessions.forEach(session => {
+      if (!dailySessions[session.day]) {
+        dailySessions[session.day] = [];
+      }
+      dailySessions[session.day].push(session);
+    });
+    
+    // Calculate stress factors
+    const avgHoursPerDay = sessions.reduce((sum, s) => sum + s.estimated_hours, 0) / daysToPlan;
+    const maxHoursInSingleDay = Math.max(...Object.values(dailySessions).map(daySessions => 
+      daySessions.reduce((sum, s) => sum + s.estimated_hours, 0)
+    ));
+    const highPriorityTasks = sessions.filter(s => s.priority >= 8).length;
+    const totalSessions = sessions.length;
+    
+    // Stress score calculation (0-100)
+    let stressScore = 0;
+    
+    // Factor 1: Average daily workload (40% weight)
+    if (avgHoursPerDay > 8) stressScore += 40;
+    else if (avgHoursPerDay > 6) stressScore += 30;
+    else if (avgHoursPerDay > 4) stressScore += 20;
+    
+    // Factor 2: Maximum single day load (25% weight)
+    if (maxHoursInSingleDay > 10) stressScore += 25;
+    else if (maxHoursInSingleDay > 8) stressScore += 20;
+    else if (maxHoursInSingleDay > 6) stressScore += 15;
+    
+    // Factor 3: High priority task concentration (20% weight)
+    const highPriorityRatio = highPriorityTasks / totalSessions;
+    if (highPriorityRatio > 0.6) stressScore += 20;
+    else if (highPriorityRatio > 0.4) stressScore += 15;
+    else if (highPriorityRatio > 0.2) stressScore += 10;
+    
+    // Factor 4: Session density (15% weight)
+    const avgSessionsPerDay = totalSessions / daysToPlan;
+    if (avgSessionsPerDay > 4) stressScore += 15;
+    else if (avgSessionsPerDay > 3) stressScore += 10;
+    else if (avgSessionsPerDay > 2) stressScore += 5;
+    
+    if (stressScore >= 70) return 'high';
+    if (stressScore >= 40) return 'medium';
     return 'low';
   };
 
@@ -249,6 +300,28 @@ const StudyPlan: React.FC = () => {
       const sessionTime = session.start_time;
       return session.day === day && sessionTime.startsWith(time.split(':')[0]);
     });
+  };
+
+  const toggleSessionCompletion = (sessionId: string) => {
+    setCompletedSessions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(sessionId)) {
+        newSet.delete(sessionId);
+      } else {
+        newSet.add(sessionId);
+      }
+      return newSet;
+    });
+  };
+
+  const getProgressStats = () => {
+    if (!studyPlan) return { completed: 0, total: 0, percentage: 0 };
+    
+    const completed = completedSessions.size;
+    const total = studyPlan.sessions.length;
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+    
+    return { completed, total, percentage };
   };
 
   if (loading) {
@@ -305,6 +378,16 @@ const StudyPlan: React.FC = () => {
               >
                 Refresh Tasks
               </Button>
+              {studyPlan && (
+                <Button
+                  variant="outlined"
+                  color="secondary"
+                  onClick={() => setCompletedSessions(new Set())}
+                  disabled={generating}
+                >
+                  Reset Progress
+                </Button>
+              )}
               <Button
                 variant="contained"
                 startIcon={generating ? <CircularProgress size={16} /> : <CalendarIcon />}
@@ -318,8 +401,14 @@ const StudyPlan: React.FC = () => {
         </Grid>
         
         <Typography variant="body2" color="textSecondary" sx={{ mt: 2 }}>
-          {tasks.length} tasks available for planning
+          {tasks.length} incomplete tasks available for planning
         </Typography>
+        
+        {tasks.length === 0 && !loading && (
+          <Alert severity="info" sx={{ mt: 2 }}>
+            No incomplete tasks available for study plan generation. All tasks may be completed or there might be an issue fetching tasks.
+          </Alert>
+        )}
       </Paper>
 
       {error && (
@@ -393,6 +482,30 @@ const StudyPlan: React.FC = () => {
             </Card>
           </Grid>
 
+          {/* Progress Card */}
+          <Grid item xs={12} md={3}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <Typography variant="h6">{getProgressStats().percentage}%</Typography>
+                </Box>
+                <Typography variant="body2" color="textSecondary">
+                  Progress: {getProgressStats().completed}/{getProgressStats().total} sessions
+                </Typography>
+                <Box sx={{ mt: 1, bgcolor: 'grey.200', borderRadius: 1, height: 8 }}>
+                  <Box 
+                    sx={{ 
+                      bgcolor: 'primary.main', 
+                      borderRadius: 1, 
+                      height: '100%', 
+                      width: `${getProgressStats().percentage}%` 
+                    }} 
+                  />
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
           {/* Timeline Grid */}
           <Grid item xs={12}>
             <Paper sx={{ p: 2, overflowX: 'auto' }}>
@@ -421,6 +534,7 @@ const StudyPlan: React.FC = () => {
                     </Box>
                     {getTimeBlocks().map(time => {
                       const session = getSessionForTimeSlot(day.name, time);
+                      const isCompleted = session && completedSessions.has(session.id);
                       return (
                         <Box
                           key={time}
@@ -429,15 +543,33 @@ const StudyPlan: React.FC = () => {
                             height: 60,
                             p: 0.5,
                             border: '1px solid #f0f0f0',
-                            bgcolor: session ? theme.palette[getPriorityColor(session.priority)].light : 'transparent',
+                            bgcolor: isCompleted ? 'grey.300' : 
+                                   session ? theme.palette[getPriorityColor(session.priority)].light : 'transparent',
                             cursor: session ? 'pointer' : 'default',
-                            '&:hover': session ? { bgcolor: theme.palette[getPriorityColor(session.priority)].main } : {}
+                            position: 'relative',
+                            '&:hover': session ? { 
+                              bgcolor: isCompleted ? 'grey.400' : theme.palette[getPriorityColor(session.priority)].main 
+                            } : {}
                           }}
-                          onClick={() => session && setSelectedSession(session)}
+                          onClick={() => session && toggleSessionCompletion(session.id)}
                         >
                           {session && (
                             <Box sx={{ fontSize: '0.7rem', lineHeight: 1.2 }}>
-                              <Typography variant="caption" sx={{ fontWeight: 'bold' }}>
+                              {isCompleted && (
+                                <Box sx={{ 
+                                  position: 'absolute', 
+                                  top: 2, 
+                                  right: 2, 
+                                  fontSize: '0.8rem',
+                                  color: 'green'
+                                }}>
+                                  ✓
+                                </Box>
+                              )}
+                              <Typography variant="caption" sx={{ 
+                                fontWeight: 'bold',
+                                textDecoration: isCompleted ? 'line-through' : 'none'
+                              }}>
                                 {session.task_title.length > 15 
                                   ? session.task_title.substring(0, 15) + '...'
                                   : session.task_title
@@ -538,6 +670,18 @@ const StudyPlan: React.FC = () => {
             </DialogContent>
             <DialogActions>
               <Button onClick={() => setSelectedSession(null)}>Close</Button>
+              {selectedSession && (
+                <Button 
+                  onClick={() => {
+                    toggleSessionCompletion(selectedSession.id);
+                    setSelectedSession(null);
+                  }}
+                  color={completedSessions.has(selectedSession.id) ? 'secondary' : 'primary'}
+                  variant={completedSessions.has(selectedSession.id) ? 'outlined' : 'contained'}
+                >
+                  {completedSessions.has(selectedSession.id) ? 'Mark Incomplete' : 'Mark Complete'}
+                </Button>
+              )}
             </DialogActions>
           </>
         )}
