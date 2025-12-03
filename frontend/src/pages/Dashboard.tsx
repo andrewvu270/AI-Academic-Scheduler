@@ -27,6 +27,8 @@ import StressVisualization from '../components/StressVisualization';
 import LearningStyleProfile from '../components/LearningStyleProfile';
 import PomodoroTimer from '../components/PomodoroTimer';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
+import SmartTaskAssistant from '../components/SmartTaskAssistant';
+import IntelligentRecommendations from '../components/IntelligentRecommendations';
 
 interface StoredTask {
   id: string;
@@ -363,85 +365,15 @@ const Dashboard = () => {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
             >
-              <Box className="bento-grid animate-fade-in delay-100" sx={{ mb: 6, padding: 0 }}>
-                {stats.map((stat, index) => {
-                  const Icon = stat.icon;
-                  return (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.1 + index * 0.1, type: "spring" }}
-                      whileHover={{ scale: 1.02, y: -5 }}
-                    >
-                      <Paper
-                        className="bento-card"
-                        sx={{
-                          gridColumn: { xs: 'span 12', sm: 'span 4' },
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'space-between',
-                          minHeight: '160px',
-                          background: stat.bgGradient,
-                          color: 'white',
-                          position: 'relative',
-                          overflow: 'hidden',
-                          '&::before': {
-                            content: '""',
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            background: 'rgba(255, 255, 255, 0.1)',
-                            backdropFilter: 'blur(10px)',
-                          }
-                        }}
-                      >
-                        <Box sx={{ position: 'relative', zIndex: 1 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                            <Box sx={{
-                              p: 1,
-                              borderRadius: '12px',
-                              bgcolor: 'rgba(255, 255, 255, 0.2)',
-                              color: 'white',
-                              mr: 2
-                            }}>
-                              <Icon sx={{ fontSize: 24 }} />
-                            </Box>
-                            <Typography color="rgba(255, 255, 255, 0.9)" variant="body2" fontWeight={500}>
-                              {stat.label}
-                            </Typography>
-                          </Box>
-                          <motion.div
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            transition={{ delay: 0.2 + index * 0.1, type: "spring" }}
-                          >
-                            <Typography variant="h3" sx={{ fontWeight: 700, color: 'white' }}>
-                              {stat.value}
-                            </Typography>
-                          </motion.div>
-                        </Box>
-                      </Paper>
-                    </motion.div>
-                  );
-                })}
-              </Box>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              {/* Smart Task Assistant */}
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.5 }}
+              >
+                <SmartTaskAssistant />
+              </motion.div>
 
-        {/* Content Based on Active View */}
-        <AnimatePresence mode="wait">
-          {activeView === 'overview' && (
-            <motion.div
-              key="overview-content"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
-            >
               {/* AI Assistant */}
               <motion.div
                 initial={{ opacity: 0, x: -20 }}
@@ -449,6 +381,15 @@ const Dashboard = () => {
                 transition={{ delay: 0.2 }}
               >
                 <NaturalLanguageQuery />
+              </motion.div>
+
+              {/* Intelligent Recommendations */}
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.6 }}
+              >
+                <IntelligentRecommendations />
               </motion.div>
 
               {/* Learning Style Profile */}
