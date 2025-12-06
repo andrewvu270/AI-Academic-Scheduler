@@ -161,7 +161,7 @@ const Navigation: React.FC = () => {
               cursor: 'pointer'
             }}
           >
-            Academic Scheduler
+            MyDesk
           </Typography>
 
           {/* Desktop Navigation */}

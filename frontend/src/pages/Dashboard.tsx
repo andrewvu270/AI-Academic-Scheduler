@@ -12,7 +12,6 @@ import {
   Fab,
 } from '@mui/material';
 import {
-  CloudUpload as CloudUploadIcon,
   TaskAlt as CompletedIcon,
   HourglassEmpty as PendingIcon,
   AccessTime as DueSoonIcon,
@@ -23,12 +22,9 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL } from '../config/api';
 import NaturalLanguageQuery from '../components/NaturalLanguageQuery';
-import StressVisualization from '../components/StressVisualization';
-import LearningStyleProfile from '../components/LearningStyleProfile';
 import PomodoroTimer from '../components/PomodoroTimer';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
-import SmartTaskAssistant from '../components/SmartTaskAssistant';
-import IntelligentRecommendations from '../components/IntelligentRecommendations';
+import { agentService } from '../utils/agentService';
 
 interface StoredTask {
   id: string;
@@ -56,8 +52,28 @@ const getLocalTasks = (): StoredTask[] => {
   return tasks;
 };
 
+const getUpcomingTasks = (tasks: StoredTask[]) => {
+  return tasks
+    .filter((task) => task.due_date)
+    .map((task) => ({
+      ...task,
+      due_date: task.due_date || '',
+    }))
+    .filter((task) => {
+      const due = new Date(task.due_date);
+      return !Number.isNaN(due.getTime());
+    })
+    .sort((a, b) => {
+      const dateA = new Date(a.due_date || '').getTime();
+      const dateB = new Date(b.due_date || '').getTime();
+      return dateA - dateB;
+    })
+    .slice(0, 3);
+};
+
 const computeStats = (tasks: StoredTask[]) => {
   const now = new Date();
+
   const dueSoonThreshold = new Date(now);
   dueSoonThreshold.setDate(now.getDate() + 7);
 
@@ -112,19 +128,32 @@ const Dashboard = () => {
   const [statsSnapshot, setStatsSnapshot] = useState(() => computeStats(getLocalTasks()));
   const [activeView, setActiveView] = useState<'overview' | 'analytics' | 'focus'>('overview');
   const [showFab, setShowFab] = useState(false);
+  const [previewTasks, setPreviewTasks] = useState<StoredTask[]>(getUpcomingTasks(getLocalTasks()));
+  const [analysisInsight, setAnalysisInsight] = useState<{
+    fileName: string;
+    summary: string;
+    nextStep?: string;
+  } | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const refreshStats = useCallback(async () => {
     const token = localStorage.getItem('access_token');
+    let taskSource: StoredTask[] = [];
 
     if (token) {
       const supabaseTasks = await fetchSupabaseTasks();
       if (supabaseTasks && supabaseTasks.length > 0) {
-        setStatsSnapshot(computeStats(supabaseTasks));
-        return;
+        taskSource = supabaseTasks;
       }
     }
 
-    setStatsSnapshot(computeStats(getLocalTasks()));
+    if (taskSource.length === 0) {
+      taskSource = getLocalTasks();
+    }
+
+    setStatsSnapshot(computeStats(taskSource));
+    setPreviewTasks(getUpcomingTasks(taskSource));
   }, []);
 
   useEffect(() => {
@@ -133,123 +162,161 @@ const Dashboard = () => {
     setTimeout(() => setShowFab(true), 1000);
   }, [refreshStats]);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files) return;
+  const readFileContent = (file: File) => {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
 
-    setUploading(true);
-    setUploadMessage(null);
+      if (file.type.startsWith('text') || file.type.includes('json') || file.type === '') {
+        reader.readAsText(file);
+      } else {
+        reader.readAsDataURL(file);
+      }
+    });
+  };
 
+  const analyzeFileWithAgent = async (file: File) => {
     try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (file.type !== 'application/pdf') {
-          setUploadMessage({ type: 'error', text: 'Only PDF files are supported' });
-          setUploading(false);
-          return;
+      const fileContent = await readFileContent(file);
+      const userId = localStorage.getItem('access_token') ? 'registered' : 'guest';
+      const response = await agentService.fullPipeline({
+        text: fileContent,
+        source_type: file.type || file.name.split('.').pop() || 'unknown',
+        schedule_days: 7,
+        user_id: userId,
+      });
+
+      const summary = response.summary || response.message || 'Analysis complete. Ask the AI assistant for next steps.';
+      const nextStep = response.next_action || response.recommended_action || response.status;
+
+      setAnalysisInsight({
+        fileName: file.name,
+        summary,
+        nextStep,
+      });
+      setAnalysisError(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to analyze file';
+      setAnalysisError(message);
+      throw error;
+    }
+  };
+
+  const processPdfUpload = async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('course_id', file.name.replace('.pdf', ''));
+
+    const uploadResponse = await fetch(`${API_BASE_URL}/api/upload/syllabus`, {
+      method: 'POST',
+      headers: {
+        'Authorization': localStorage.getItem('access_token') ? 
+          `Bearer ${localStorage.getItem('access_token')}` : '',
+      },
+      body: formData,
+    });
+
+    if (!uploadResponse.ok) {
+      const error = await uploadResponse.json();
+      throw new Error(error.detail || 'Failed to extract text from PDF');
+    }
+
+    const uploadData = await uploadResponse.json();
+
+    if (uploadData.tasks && uploadData.tasks.length > 0) {
+      const courseName = file.name.replace('.pdf', '').replace(/_/g, ' ');
+      const userId = localStorage.getItem('access_token') ? 'registered' : 'guest';
+
+      let courseId: string | null = null;
+      try {
+        const courseHeaders: HeadersInit = { 'Content-Type': 'application/json' };
+        const accessToken = localStorage.getItem('access_token');
+        if (accessToken) {
+          courseHeaders['Authorization'] = `Bearer ${accessToken}`;
         }
 
-        // Extract text from PDF using the existing upload endpoint first
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('course_id', file.name.replace('.pdf', ''));
-
-        const uploadResponse = await fetch(`${API_BASE_URL}/api/upload/syllabus`, {
+        const courseResponse = await fetch(`${API_BASE_URL}/api/courses/`, {
           method: 'POST',
-          headers: {
-            'Authorization': localStorage.getItem('access_token') ? 
-              `Bearer ${localStorage.getItem('access_token')}` : '',
-          },
-          body: formData,
+          headers: courseHeaders,
+          body: JSON.stringify({
+            name: courseName,
+            code: courseName.substring(0, 10).toUpperCase(),
+            description: `Course from ${file.name}`,
+          }),
         });
 
-        if (!uploadResponse.ok) {
-          const error = await uploadResponse.json();
-          throw new Error(error.detail || 'Failed to extract text from PDF');
+        if (courseResponse.ok) {
+          const courseData = await courseResponse.json();
+          courseId = courseData.id;
+        }
+      } catch (err) {
+        console.error('Error creating course:', err);
+        courseId = `course_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      }
+
+      if (userId === 'guest' && courseId) {
+        const courseData = {
+          id: courseId,
+          name: courseName,
+          code: courseName.substring(0, 10).toUpperCase(),
+          description: `Course from ${file.name}`,
+          user_id: 'guest',
+          created_at: new Date().toISOString(),
+        };
+        localStorage.setItem(`course_${courseId}`, JSON.stringify(courseData));
+      }
+
+      uploadData.tasks.forEach((task: any) => {
+        const enhancedTask = {
+          ...task,
+          user_id: userId,
+          course_id: courseId,
+        };
+
+        if (userId === 'guest') {
+          localStorage.setItem(`task_${task.id}`, JSON.stringify(enhancedTask));
+        }
+      });
+
+      if (userId === 'guest' && courseId) {
+        const courseTaskIds = uploadData.tasks.map((t: any) => t.id);
+        localStorage.setItem(`course_${courseId}_tasks`, JSON.stringify(courseTaskIds));
+      }
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    setAnalysisLoading(true);
+    setUploadMessage(null);
+    setAnalysisError(null);
+
+    try {
+      for (const file of Array.from(files)) {
+        if (file.type === 'application/pdf') {
+          await processPdfUpload(file);
+          await refreshStats();
         }
 
-        const uploadData = await uploadResponse.json();
-        
-        // Store the extracted tasks directly
-        if (uploadData.tasks && uploadData.tasks.length > 0) {
-          const courseName = file.name.replace('.pdf', '').replace(/_/g, ' ');
-          const userId = localStorage.getItem('access_token') ? 'registered' : 'guest';
-          
-          // Create course first
-          let courseId: string | null = null;
-          try {
-            const courseHeaders: HeadersInit = { 'Content-Type': 'application/json' };
-            const accessToken = localStorage.getItem('access_token');
-            if (accessToken) {
-              courseHeaders['Authorization'] = `Bearer ${accessToken}`;
-            }
-
-            const courseResponse = await fetch(`${API_BASE_URL}/api/courses/`, {
-              method: 'POST',
-              headers: courseHeaders,
-              body: JSON.stringify({
-                name: courseName,
-                code: courseName.substring(0, 10).toUpperCase(),
-                description: `Course from ${file.name}`,
-              }),
-            });
-            
-            if (courseResponse.ok) {
-              const courseData = await courseResponse.json();
-              courseId = courseData.id;
-            }
-          } catch (err) {
-            console.error('Error creating course:', err);
-            // Generate fallback course ID for guest mode
-            courseId = `course_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          }
-
-          // Store course data for guest mode
-          if (userId === 'guest' && courseId) {
-            const courseData = {
-              id: courseId,
-              name: courseName,
-              code: courseName.substring(0, 10).toUpperCase(),
-              description: `Course from ${file.name}`,
-              user_id: 'guest',
-              created_at: new Date().toISOString(),
-            };
-            localStorage.setItem(`course_${courseId}`, JSON.stringify(courseData));
-          }
-
-          // Store tasks directly from upload response
-          uploadData.tasks.forEach((task: any) => {
-            const enhancedTask = {
-              ...task,
-              user_id: userId,
-              course_id: courseId,
-            };
-            
-            if (userId === 'guest') {
-              localStorage.setItem(`task_${task.id}`, JSON.stringify(enhancedTask));
-            }
-          });
-
-          // Store course tasks list for guest mode
-          if (userId === 'guest' && courseId) {
-            const courseTaskIds = uploadData.tasks.map((t: any) => t.id);
-            localStorage.setItem(`course_${courseId}_tasks`, JSON.stringify(courseTaskIds));
-          }
-        }
-
+        await analyzeFileWithAgent(file);
         setUploadedFiles((prev) => [...prev, file.name]);
       }
 
       setUploadMessage({ 
         type: 'success', 
-        text: 'Files processed successfully! Tasks extracted with AI-powered workload predictions and prioritization.' 
+        text: 'Files processed. Ask the AI assistant for next-step planning or scheduling.' 
       });
-      await refreshStats();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to upload files';
+      const errorMessage = error instanceof Error ? error.message : 'Failed to handle files';
       setUploadMessage({ type: 'error', text: errorMessage });
+      setAnalysisError(errorMessage);
     } finally {
       setUploading(false);
+      setAnalysisLoading(false);
     }
   };
 
@@ -311,49 +378,34 @@ const Dashboard = () => {
       </AnimatePresence>
 
       <Container maxWidth="lg" sx={{ py: 4 }}>
-        {/* Enhanced Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          <Box sx={{ mb: 6 }} className="animate-fade-in">
-            <Typography variant="h2" component="h1" sx={{ mb: 1, fontWeight: 700 }}>
-              Welcome to MyDesk
-            </Typography>
-            <Typography variant="body1" color="textSecondary" sx={{ fontSize: '1.1rem' }}>
-              Your intelligent productivity companion for work and learning
-            </Typography>
-            
-            {/* View Switcher */}
-            <Box sx={{ display: 'flex', gap: 2, mt: 3 }}>
-              {[
-                { id: 'overview', label: 'Overview', icon: <DashboardIcon /> },
-                { id: 'analytics', label: 'Analytics', icon: <AnalyticsIcon /> },
-                { id: 'focus', label: 'Focus Mode', icon: <TimerIcon /> },
-              ].map((view) => (
-                <motion.div
-                  key={view.id}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Button
-                    variant={activeView === view.id ? 'contained' : 'outlined'}
-                    startIcon={view.icon}
-                    onClick={() => setActiveView(view.id as any)}
-                    sx={{
-                      borderRadius: '20px',
-                      px: 3,
-                      py: 1,
-                    }}
-                  >
-                    {view.label}
-                  </Button>
-                </motion.div>
-              ))}
-            </Box>
+        <Box sx={{ mb: 5 }}>
+          <Typography variant="h3" sx={{ fontWeight: 700, mb: 1 }}>
+            Welcome back
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+            A streamlined workspace that mirrors the landing-page flow.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            {[
+              { id: 'overview', label: 'Overview', icon: <DashboardIcon fontSize="small" /> },
+              { id: 'analytics', label: 'Analytics', icon: <AnalyticsIcon fontSize="small" /> },
+              { id: 'focus', label: 'Focus Mode', icon: <TimerIcon fontSize="small" /> },
+            ].map((view) => (
+              <Button
+                key={view.id}
+                variant={activeView === view.id ? 'contained' : 'outlined'}
+                onClick={() => setActiveView(view.id as 'overview' | 'analytics' | 'focus')}
+                startIcon={view.icon}
+                sx={{
+                  borderRadius: '999px',
+                  textTransform: 'none',
+                }}
+              >
+                {view.label}
+              </Button>
+            ))}
           </Box>
-        </motion.div>
+        </Box>
 
         {/* Animated Stats Grid */}
         <AnimatePresence mode="wait">
@@ -365,172 +417,167 @@ const Dashboard = () => {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
             >
-              {/* Smart Task Assistant */}
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.5 }}
-              >
-                <SmartTaskAssistant />
-              </motion.div>
+              <Grid container spacing={3} sx={{ mb: 4 }}>
+                {stats.map((stat) => (
+                  <Grid item xs={12} md={4} key={stat.label}>
+                    <Paper
+                      sx={{
+                        p: 3,
+                        borderRadius: '20px',
+                        color: '#fff',
+                        background: stat.bgGradient,
+                        boxShadow: '0 12px 30px rgba(0,0,0,0.12)'
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                        <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                          {stat.value}
+                        </Typography>
+                        <stat.icon />
+                      </Box>
+                      <Typography variant="subtitle2" sx={{ opacity: 0.9 }}>
+                        {stat.label}
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                ))}
+              </Grid>
 
-              {/* AI Assistant */}
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.2 }}
-              >
-                <NaturalLanguageQuery />
-              </motion.div>
+              <Grid container spacing={3} sx={{ mb: 4 }}>
+                <Grid item xs={12} md={7}>
+                  <Paper sx={{ p: 4, borderRadius: '24px' }}>
+                    <Typography variant="h5" sx={{ mb: 1, fontWeight: 600 }}>
+                      Smart Scheduling
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                      Upcoming tasks pulled directly from your documents and uploads.
+                    </Typography>
+                    {previewTasks.length > 0 ? (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {previewTasks.map((task) => (
+                          <Paper
+                            key={task.id}
+                            variant="outlined"
+                            sx={{
+                              p: 2.5,
+                              borderRadius: '18px',
+                              borderColor: 'rgba(0,0,0,0.08)',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <Box>
+                              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                                {task.title}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Due {new Date(task.due_date || '').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                              </Typography>
+                            </Box>
+                            <Button size="small" variant="outlined" onClick={() => window.location.assign('/schedule')}>
+                              View plan
+                            </Button>
+                          </Paper>
+                        ))}
+                      </Box>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No upcoming tasks detected yet. Upload a file or add tasks to see your personalized plan.
+                      </Typography>
+                    )}
+                  </Paper>
+                </Grid>
 
-              {/* Intelligent Recommendations */}
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.6 }}
-              >
-                <IntelligentRecommendations />
-              </motion.div>
-
-              {/* Learning Style Profile */}
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.3 }}
-              >
-                <LearningStyleProfile />
-              </motion.div>
-
-              {/* Stress Visualization */}
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4 }}
-              >
-                <StressVisualization />
-              </motion.div>
-
-              {/* Enhanced Upload Section */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 }}
-              >
-                <Paper
-                  className="bento-card animate-fade-in delay-200"
-                  sx={{
-                    p: 6,
-                    mb: 6,
-                    textAlign: 'center',
-                    border: '2px dashed #e0e0e0',
-                    bgcolor: 'transparent',
-                    background: 'linear-gradient(135deg, rgba(25, 118, 210, 0.02), rgba(66, 165, 245, 0.05))',
-                    '&:hover': {
-                      borderColor: 'primary.main',
-                      bgcolor: 'rgba(25, 118, 210, 0.05)',
-                      transform: 'translateY(-2px)',
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.1)'
-                    },
-                    transition: 'all 0.3s ease'
-                  }}
-                >
-                  <motion.div
-                    animate={{ y: [0, -10, 0] }}
-                    transition={{ duration: 2, repeat: Infinity }}
+                <Grid item xs={12} md={5}>
+                  <Paper
+                    sx={{
+                      p: 4,
+                      borderRadius: '24px',
+                      height: '100%',
+                      border: '2px dashed rgba(0,0,0,0.08)'
+                    }}
                   >
-                    <CloudUploadIcon sx={{ fontSize: 48, mb: 2, color: 'primary.main' }} />
-                  </motion.div>
-                  <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>
-                    Upload to MyDesk
-                  </Typography>
-                  <Typography variant="body1" sx={{ mb: 4, maxWidth: '500px', mx: 'auto' }}>
-                    Drop your PDF syllabus or documents here to automatically extract deadlines and create your intelligent study plan.
-                  </Typography>
-                  <motion.div
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
+                    <Typography variant="h5" sx={{ mb: 1, fontWeight: 600 }}>
+                      File Intake
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                      Drop any syllabus, assignment brief, or reference file. The agent will decide whether to schedule it or offer assistance.
+                    </Typography>
                     <Button
                       variant="contained"
                       component="label"
-                      size="large"
                       disabled={uploading}
-                      sx={{ 
-                        minWidth: '200px',
-                        py: 1.5,
-                        background: 'linear-gradient(135deg, #1976d2, #42a5f5)',
-                        '&:hover': {
-                          background: 'linear-gradient(135deg, #1565c0, #2196f3)',
-                        }
+                      sx={{
+                        minWidth: '180px',
+                        mb: 2,
+                        background: 'linear-gradient(135deg, #1976d2, #42a5f5)'
                       }}
                     >
-                      {uploading ? <CircularProgress size={24} color="inherit" /> : 'Select PDF'}
+                      {uploading ? <CircularProgress size={22} color="inherit" /> : 'Upload files'}
                       <input
                         type="file"
                         multiple
-                        accept=".pdf"
+                        accept="*/*"
                         hidden
                         onChange={handleFileUpload}
                         disabled={uploading}
                       />
                     </Button>
-                  </motion.div>
-                </Paper>
-              </motion.div>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      Works for both guest and logged-in modes.
+                    </Typography>
 
-              {/* Uploaded Files */}
-              {uploadedFiles.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.6 }}
-                  className="animate-fade-in delay-300"
-                >
-                  <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
-                    Recent Uploads
-                  </Typography>
-                  <Grid container spacing={3}>
-                    {uploadedFiles.map((file, index) => (
-                      <Grid item xs={12} sm={6} md={4} key={index}>
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.1 + index * 0.1 }}
-                          whileHover={{ scale: 1.02, y: -5 }}
-                        >
-                          <Paper className="bento-card" sx={{ p: 3 }}>
-                            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
-                              {file}
-                            </Typography>
-                            <LinearProgress
-                              variant="determinate"
-                              value={100}
-                              sx={{
-                                mb: 2,
-                                height: 6,
-                                borderRadius: 3,
-                                bgcolor: '#f0f0f0',
-                                '& .MuiLinearProgress-bar': {
-                                  borderRadius: 3,
-                                  background: 'linear-gradient(90deg, #4caf50, #66bb6a)'
-                                }
-                              }}
-                            />
-                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <Typography variant="caption" color="textSecondary">
-                                Processed
-                              </Typography>
-                              <Button size="small" color="primary">
-                                View
-                              </Button>
-                            </Box>
-                          </Paper>
-                        </motion.div>
-                      </Grid>
-                    ))}
-                  </Grid>
-                </motion.div>
-              )}
+                    {analysisLoading && (
+                      <Box sx={{ mt: 2 }}>
+                        <LinearProgress />
+                      </Box>
+                    )}
+
+                    {analysisError && (
+                      <Alert severity="error" sx={{ mt: 2 }}>
+                        {analysisError}
+                      </Alert>
+                    )}
+
+                    {analysisInsight && !analysisError && (
+                      <Box sx={{ mt: 3 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                          Latest insight ({analysisInsight.fileName})
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                          {analysisInsight.summary}
+                        </Typography>
+                        {analysisInsight.nextStep && (
+                          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                            Suggested next step: {analysisInsight.nextStep}
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+
+                    {uploadedFiles.length > 0 && (
+                      <Box sx={{ mt: 3 }}>
+                        <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                          Recent uploads
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          {uploadedFiles.slice(-3).map((file) => (
+                            <Paper key={file} variant="outlined" sx={{ p: 1.5, borderRadius: '12px' }}>
+                              <Typography variant="caption">{file}</Typography>
+                            </Paper>
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                  </Paper>
+                </Grid>
+              </Grid>
+
+              <Box sx={{ mb: 4 }}>
+                <NaturalLanguageQuery />
+              </Box>
+
             </motion.div>
           )}
 

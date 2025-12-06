@@ -4,32 +4,26 @@ import {
   CardContent,
   Typography,
   Box,
-  Chip,
-  IconButton,
-  Tooltip,
   Button,
-  useTheme,
-  Fab,
-  Badge,
-  Avatar,
+  IconButton,
   LinearProgress,
-  Grow,
-  Fade,
-  Zoom,
-  Slide,
+  Avatar,
+  Chip,
+  Tooltip,
+  useTheme,
 } from '@mui/material';
 import {
   Timer as TimerIcon,
   PlayArrow as PlayIcon,
   Pause as PauseIcon,
   Refresh as RefreshIcon,
-  Psychology as PsychologyIcon,
-  EmojiEvents as TrophyIcon,
-  LocalFireDepartment as FireIcon,
   Star as StarIcon,
-  LightningBolt as EnergyIcon,
+  LocalFireDepartment as FireIcon,
+  EmojiEvents as TrophyIcon,
+  Bolt as EnergyIcon,
   WorkspacePremium as PremiumIcon,
-  Celebrate as CelebrateIcon,
+  AutoAwesome as CelebrateIcon,
+  Psychology as PsychologyIcon,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -43,7 +37,7 @@ interface Achievement {
   id: string;
   name: string;
   description: string;
-  icon: React.ReactNode;
+  iconType: 'star' | 'fire' | 'trophy' | 'energy';
   unlocked: boolean;
   progress: number;
   maxProgress: number;
@@ -129,7 +123,7 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
           id: 'first_session',
           name: 'First Focus',
           description: 'Complete your first focus session',
-          icon: <StarIcon />,
+          iconType: 'star',
           unlocked: false,
           progress: 0,
           maxProgress: 1
@@ -138,7 +132,7 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
           id: 'streak_warrior',
           name: 'Streak Warrior',
           description: 'Complete 5 sessions in a row',
-          icon: <FireIcon />,
+          iconType: 'fire',
           unlocked: false,
           progress: 0,
           maxProgress: 5
@@ -147,7 +141,7 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
           id: 'focus_master',
           name: 'Focus Master',
           description: 'Complete 50 total sessions',
-          icon: <TrophyIcon />,
+          iconType: 'trophy',
           unlocked: false,
           progress: 0,
           maxProgress: 50
@@ -156,7 +150,7 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
           id: 'energy_champion',
           name: 'Energy Champion',
           description: 'Maintain high energy for 10 sessions',
-          icon: <EnergyIcon />,
+          iconType: 'energy',
           unlocked: false,
           progress: 0,
           maxProgress: 10
@@ -298,6 +292,16 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
     return theme.palette.success.main;
   };
 
+  const getIconForType = (iconType: Achievement['iconType']) => {
+    switch (iconType) {
+      case 'star': return <StarIcon />;
+      case 'fire': return <FireIcon />;
+      case 'trophy': return <TrophyIcon />;
+      case 'energy': return <EnergyIcon />;
+      default: return <StarIcon />;
+    }
+  };
+
   const getStyleSpecificTip = (): string => {
     const tips = {
       visual: "🎨 Try drawing a diagram to visualize the concept",
@@ -372,7 +376,7 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
       >
-        <Card sx={{ mb: 2, border: `2px solid ${getSessionColor()}20`, position: 'relative', overflow: 'visible' }}>
+        <Card sx={{ mb: 2, border: `2px solid ${getSessionColor()}`, position: 'relative', overflow: 'visible' }}>
           {/* Energy Bar */}
           <Box sx={{ position: 'absolute', top: -10, left: 20, right: 20, zIndex: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -480,7 +484,7 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
                   py: 3,
                   bgcolor: `${getSessionColor()}10`,
                   borderRadius: 2,
-                  border: `2px solid ${getSessionColor()}30`,
+                  border: `2px solid ${getSessionColor()}`,
                   position: 'relative'
                 }}>
                   {/* Animated Ring Effect */}
@@ -493,7 +497,7 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
                         transform: 'translate(-50%, -50%)',
                         width: '120%',
                         height: '120%',
-                        border: `2px solid ${getSessionColor()}30`,
+                        border: `2px solid ${getSessionColor()}`,
                         borderRadius: '16px'
                       }}
                       animate={{
@@ -524,7 +528,7 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
                         fontWeight: 700, 
                         color: getSessionColor(),
                         fontFamily: 'monospace',
-                        textShadow: isRunning ? `0 0 20px ${getSessionColor()}40` : 'none'
+                        textShadow: isRunning ? `0 0 20px ${getSessionColor()}` : 'none'
                       }}
                     >
                       {formatTime(timeLeft)}
@@ -544,7 +548,7 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
                     <motion.div
                       style={{
                         height: '100%',
-                        background: `linear-gradient(90deg, ${getSessionColor()}, ${getSessionColor()}80)`,
+                        background: `linear-gradient(90deg, ${getSessionColor()}, ${getSessionColor()})`,
                         borderRadius: 4
                       }}
                       initial={{ width: 0 }}
@@ -714,7 +718,7 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
                                 height: 20, 
                                 bgcolor: achievement.unlocked ? 'primary.main' : 'grey.300' 
                               }}>
-                                {achievement.icon}
+                                {getIconForType(achievement.iconType)}
                               </Avatar>
                             }
                             label={achievement.name}
@@ -737,6 +741,8 @@ const PomodoroTimer: React.FC<PomodoroTimerProps> = ({
         </Card>
       </motion.div>
     </>
+  );
+
 };
 
 export default PomodoroTimer;

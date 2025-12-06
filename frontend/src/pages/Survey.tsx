@@ -17,7 +17,6 @@ import {
   Grid,
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import Navigation from '../components/Navigation';
 
 interface SurveyItem {
   task_title: string;
@@ -238,9 +237,7 @@ const Survey: React.FC = () => {
   };
 
   return (
-    <>
-      <Navigation />
-      <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h3" component="h1" sx={{ fontWeight: 'bold', mb: 2 }}>
           Task Data Collection Survey
@@ -487,7 +484,6 @@ const Survey: React.FC = () => {
         </Button>
       </Box>
       </Container>
-    </>
   );
 };
 
